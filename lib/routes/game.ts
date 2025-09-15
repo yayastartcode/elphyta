@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import Question from '../../api/models/Question.js';
+import Question from '../../api/models/Question';
 import UserProgress from '../../api/models/UserProgress.js';
 import GameSession from '../../api/models/GameSession.js';
 import LevelScore from '../../api/models/LevelScore.js';

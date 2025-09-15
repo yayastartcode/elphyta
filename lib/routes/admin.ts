@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import mongoose from 'mongoose';
-import Question from '../../api/models/Question.js';
+import Question from '../../api/models/Question';
 import DareInstruction from '../../api/models/DareInstruction.js';
 import User from '../../api/models/User.js';
 import GameSession from '../../api/models/GameSession.js';

@@ -27,7 +27,7 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
-  const [timeLeft, setTimeLeft] = useState(30);
+  const [timeLeft, setTimeLeft] = useState(mode === 'truth' ? 120 : 300);
   const [isAnswered, setIsAnswered] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
   const [gameStatus, setGameStatus] = useState<'playing' | 'completed' | 'failed'>('playing');
@@ -202,7 +202,7 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
     setSelectedAnswer('');
     setIsAnswered(false);
     setShowExplanation(false);
-    setTimeLeft(30);
+    setTimeLeft(mode === 'truth' ? 120 : 300);
     setCorrectAnswer(null);
     setExplanation('');
     setIsValidatingAnswer(false);
@@ -235,7 +235,7 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
     setSelectedAnswer(null);
     setScore(0);
     setLives(3);
-    setTimeLeft(30);
+    setTimeLeft(mode === 'truth' ? 120 : 300);
     setIsAnswered(false);
     setShowExplanation(false);
     setGameStatus('playing');

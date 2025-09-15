@@ -11,7 +11,7 @@ import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import connectDatabase from './config/database.js';
 import User from './models/User.js';
-import Question from './models/Question.js';
+import Question from './models/Question';
 import GameSession from './models/GameSession.js';
 import UserProgress from './models/UserProgress.js';
 import LevelScore from './models/LevelScore.js';
@@ -40,9 +40,14 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Register
 app.post('/auth/register', async (req: express.Request, res: express.Response): Promise<void> => {
   try {
-    const { name, email, password } = req.body;
+    console.log('Registration request body:', req.body);
+    const { name, username, email, password } = req.body;
+    const actualName = name || username; // Handle both field names
     
-    if (!name || !email || !password) {
+    console.log('Extracted fields:', { actualName, email, password: password ? '[HIDDEN]' : 'undefined' });
+    
+    if (!actualName || !email || !password) {
+      console.log('Missing required fields:', { name: !actualName, email: !email, password: !password });
       res.status(400).json({
         success: false,
         message: 'Nama, email, dan password diperlukan'
@@ -70,7 +75,7 @@ app.post('/auth/register', async (req: express.Request, res: express.Response): 
     const hashedPassword = await bcrypt.hash(password, 12);
     
     const user = new User({
-      name,
+      name: actualName,
       email,
       password_hash: hashedPassword,
       role: 'player'
@@ -98,10 +103,15 @@ app.post('/auth/register', async (req: express.Request, res: express.Response): 
       }
     });
   } catch (error) {
-    console.error('Register error:', error);
+    console.error('Register error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : undefined
+    });
     res.status(500).json({
       success: false,
-      message: 'Terjadi kesalahan server'
+      message: 'Terjadi kesalahan server',
+      error: process.env.NODE_ENV === 'development' ? error : undefined
     });
   }
 });
