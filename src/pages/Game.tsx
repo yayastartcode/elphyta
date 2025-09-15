@@ -68,40 +68,93 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
     }
   }, [timeLeft, isAnswered, gameStatus]);
 
+  const fallbackQuestions = [
+    {
+      _id: '1',
+      question_text: 'Berapa hasil dari 2 + 2?',
+      options: { A: '3', B: '4', C: '5', D: '6' },
+      correct_answer: 'B',
+      explanation: 'Hasil dari 2 + 2 adalah 4'
+    },
+    {
+      _id: '2',
+      question_text: 'Apa ibu kota Indonesia?',
+      options: { A: 'Bandung', B: 'Jakarta', C: 'Surabaya', D: 'Medan' },
+      correct_answer: 'B',
+      explanation: 'Jakarta adalah ibu kota Indonesia'
+    }
+  ];
+
   const fetchQuestions = async () => {
     try {
+      setIsLoading(true);
+      
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/game/questions/${mode}/${level}`, {
+      if (!token) {
+        navigate('/login');
+        return;
+      }
+
+      // Validate mode and level before making request
+      if (!mode || !['truth', 'dare'].includes(mode)) {
+        throw new Error('Invalid game mode. Please select Truth or Dare.');
+      }
+      
+      const levelNum = parseInt(level.toString());
+      if (!level || isNaN(levelNum) || levelNum < 1 || levelNum > 5) {
+        throw new Error('Invalid level. Please select a level between 1 and 5.');
+      }
+
+      console.debug('Fetching questions for:', { mode, level, hasToken: !!token });
+      
+      const response = await fetch(`/game/questions/${mode}/${level}`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
 
-      if (response.ok) {
-        const data = await response.json();
+      if (!response.ok) {
+        let errorMessage = `Server error (${response.status})`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch {
+          // If response is not JSON, use status text
+          errorMessage = response.statusText || errorMessage;
+        }
+        
+        if (response.status === 404) {
+          errorMessage = 'Questions not found for this level. Please try a different level or contact support.';
+        } else if (response.status === 403) {
+          errorMessage = 'This level is not unlocked yet. Complete previous levels first.';
+        } else if (response.status === 401) {
+          errorMessage = 'Your session has expired. Please log in again.';
+          navigate('/login');
+          return;
+        }
+        
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+      console.debug('API response:', data);
+      
+      if (data.success && data.data && data.data.questions && Array.isArray(data.data.questions)) {
+        if (data.data.questions.length === 0) {
+          throw new Error('No questions available for this level. Please try a different level.');
+        }
+        
+        console.debug('Setting questions from API:', data.data.questions.length, 'questions');
         setQuestions(data.data.questions);
       } else {
-        console.error('Failed to fetch questions');
+        throw new Error('Invalid response format from server. Please try again.');
       }
     } catch (error) {
       console.error('Error fetching questions:', error);
-      // Fallback questions for demo
-      setQuestions([
-        {
-          _id: '1',
-          question_text: 'Berapa hasil dari 2 + 2?',
-          options: { A: '3', B: '4', C: '5', D: '6' },
-          correct_answer: 'B',
-          explanation: 'Hasil dari 2 + 2 adalah 4'
-        },
-        {
-          _id: '2',
-          question_text: 'Apa ibu kota Indonesia?',
-          options: { A: 'Bandung', B: 'Jakarta', C: 'Surabaya', D: 'Medan' },
-          correct_answer: 'B',
-          explanation: 'Jakarta adalah ibu kota Indonesia'
-        }
-      ]);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      console.warn('Using fallback questions due to error:', errorMessage);
+      setQuestions(fallbackQuestions);
     } finally {
       setIsLoading(false);
     }
@@ -120,7 +173,9 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
   };
 
   // Get current question and convert options to array
-  const currentQuestion = questions[currentQuestionIndex] || { _id: '', question_text: '', options: {}, correct_answer: 'A', explanation: '' };
+  const currentQuestion = questions && questions.length > 0 && questions[currentQuestionIndex] 
+    ? questions[currentQuestionIndex] 
+    : { _id: '', question_text: '', options: {}, correct_answer: 'A', explanation: '' };
   const safeOptions = currentQuestion.options && typeof currentQuestion.options === 'object' 
     ? Object.entries(currentQuestion.options).map(([key, value]) => ({ key, value }))
     : [];
@@ -128,12 +183,25 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
   const handleAnswerSelect = async (answerKey: string) => {
     if (isAnswered || isValidatingAnswer) return;
     
+    // Validate input data before sending
+    if (!answerKey || !currentQuestion._id) {
+      console.error('Invalid answer data:', { answerKey, questionId: currentQuestion._id });
+      setIsValidatingAnswer(false);
+      return;
+    }
+    
     setSelectedAnswer(answerKey);
     setIsValidatingAnswer(true);
     
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/game/validate-answer', {
+      if (!token) {
+        console.error('No authentication token found');
+        navigate('/login');
+        return;
+      }
+      
+      const response = await fetch('/game/validate-answer', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -141,12 +209,17 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
         },
         body: JSON.stringify({
           questionId: currentQuestion._id,
-          userAnswer: answerKey
+          selectedAnswer: answerKey
         })
       });
       
       if (response.ok) {
         const data = await response.json();
+        
+        if (!data.success) {
+          throw new Error(data.message || 'Failed to validate answer');
+        }
+        
         const isCorrect = data.data.isCorrect;
         
         setCorrectAnswer(data.data.correctAnswer);
@@ -176,13 +249,19 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
           }
         }, 3000);
       } else {
-        console.error('Failed to validate answer');
-        // Fallback: treat as incorrect
-        setIsAnswered(true);
-        setLives(lives - 1);
-        if (lives <= 1) {
-          setGameStatus('failed');
+        if (response.status === 401) {
+          console.error('Authentication failed');
+          navigate('/login');
+          return;
+        } else if (response.status === 400) {
+          const errorData = await response.json().catch(() => ({ message: 'Invalid request data' }));
+          console.error('Validation error:', errorData.message);
+          throw new Error(`Validation error: ${errorData.message}`);
+        } else if (response.status === 404) {
+          console.error('Question not found');
+          throw new Error('Question not found. Please try again.');
         }
+        throw new Error(`Server error: ${response.status}`);
       }
     } catch (error) {
       console.error('Error validating answer:', error);
@@ -211,7 +290,13 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
   const submitScore = async () => {
     try {
       const token = localStorage.getItem('token');
-      await fetch('/api/game/submit', {
+      if (!token) {
+        console.error('No authentication token found');
+        navigate('/login');
+        return;
+      }
+      
+      const response = await fetch('/game/submit', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -225,6 +310,23 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
           correctAnswers: score > 0 ? Math.floor(score / 100) : 0
         })
       });
+      
+      if (!response.ok) {
+        if (response.status === 401) {
+          console.error('Authentication failed');
+          navigate('/login');
+          return;
+        }
+        throw new Error(`Failed to submit score: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to submit score');
+      }
+      
+      console.log('Score submitted successfully:', data);
     } catch (error) {
       console.error('Error submitting score:', error);
     }

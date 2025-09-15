@@ -6,11 +6,15 @@
   "scripts": {
     "client:dev": "vite",
     "build": "tsc -b && vite build",
+    "vercel-build": "npm run build",
     "lint": "eslint .",
     "preview": "vite preview",
     "check": "tsc --noEmit",
     "server:dev": "nodemon",
-    "dev": "concurrently \"npm run client:dev\" \"npm run server:dev\""
+    "dev": "concurrently \"npm run client:dev\" \"npm run server:dev\"",
+    "seed:questions": "tsx api/seeds/questions.ts",
+    "seed:production": "tsx scripts/seed-production.js",
+    "postbuild": "echo 'Build completed successfully'"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

@@ -2,76 +2,76 @@ import Question from '../models/Question';
 import connectDatabase from '../config/database';
 
 const sampleQuestions = [
-  // Level 1 - Truth Mode Questions
+  // Level 1 - Truth Mode Questions (Enhanced Pythagorean Problems)
   {
-    question_text: "Jika sebuah segitiga siku-siku memiliki sisi a = 3 dan sisi b = 4, berapakah panjang sisi c (hipotenusa)?",
+    question_text: "Sebuah tangga sepanjang 25 meter disandarkan pada dinding. Jika kaki tangga berjarak 15 meter dari dinding, berapa tinggi dinding yang dapat dicapai tangga?",
     options: {
-      A: "5",
-      B: "6",
-      C: "7",
-      D: "8"
+      A: "20 meter",
+      B: "18 meter",
+      C: "22 meter",
+      D: "16 meter"
     },
     correct_answer: "A" as const,
     level: 1,
     game_mode: "truth" as const,
     question_order: 1,
-    explanation: "Menggunakan teorema Pythagoras: c² = a² + b² = 3² + 4² = 9 + 16 = 25, maka c = 5"
+    explanation: "Langkah penyelesaian:\n1. Diketahui: panjang tangga (hipotenusa) = 25 m, jarak kaki tangga = 15 m\n2. Dicari: tinggi dinding\n3. Rumus: a² + b² = c²\n4. Substitusi: 15² + tinggi² = 25²\n5. 225 + tinggi² = 625\n6. tinggi² = 625 - 225 = 400\n7. tinggi = √400 = 20 meter"
   },
   {
-    question_text: "Dalam segitiga siku-siku dengan sisi 5 dan 12, berapakah panjang hipotenusa?",
+    question_text: "Seorang pilot terbang dari kota A ke kota B sejauh 120 km ke utara, kemudian ke kota C sejauh 160 km ke timur. Berapa jarak langsung dari kota A ke kota C?",
     options: {
-      A: "13",
-      B: "14",
-      C: "15",
-      D: "16"
+      A: "200 km",
+      B: "180 km",
+      C: "220 km",
+      D: "240 km"
     },
     correct_answer: "A" as const,
     level: 1,
     game_mode: "truth" as const,
     question_order: 2,
-    explanation: "c² = 5² + 12² = 25 + 144 = 169, maka c = 13"
+    explanation: "Langkah penyelesaian:\n1. Membentuk segitiga siku-siku: A-B-C\n2. AB = 120 km (utara), BC = 160 km (timur)\n3. AC adalah hipotenusa\n4. Rumus: AC² = AB² + BC²\n5. AC² = 120² + 160²\n6. AC² = 14400 + 25600 = 40000\n7. AC = √40000 = 200 km"
   },
   {
-    question_text: "Jika hipotenusa = 10 dan salah satu sisi = 6, berapakah panjang sisi lainnya?",
+    question_text: "Sebuah layar TV berbentuk persegi panjang memiliki lebar 48 cm dan tinggi 36 cm. Berapa panjang diagonal layar TV tersebut?",
     options: {
-      A: "8",
-      B: "7",
-      C: "9",
-      D: "6"
+      A: "60 cm",
+      B: "55 cm",
+      C: "65 cm",
+      D: "50 cm"
     },
     correct_answer: "A" as const,
     level: 1,
     game_mode: "truth" as const,
     question_order: 3,
-    explanation: "b² = c² - a² = 10² - 6² = 100 - 36 = 64, maka b = 8"
+    explanation: "Langkah penyelesaian:\n1. Diketahui: lebar = 48 cm, tinggi = 36 cm\n2. Diagonal membentuk hipotenusa segitiga siku-siku\n3. Rumus: diagonal² = lebar² + tinggi²\n4. diagonal² = 48² + 36²\n5. diagonal² = 2304 + 1296 = 3600\n6. diagonal = √3600 = 60 cm"
   },
   {
-    question_text: "Segitiga dengan sisi 8, 15, dan 17 adalah segitiga siku-siku. Benar atau salah?",
+    question_text: "Sebuah kapal berlayar 21 km ke selatan, kemudian 28 km ke barat. Jika kapal ingin kembali langsung ke titik awal, berapa jarak yang harus ditempuh?",
     options: {
-      A: "Benar",
-      B: "Salah",
-      C: "Tidak dapat ditentukan",
-      D: "Tergantung sudutnya"
+      A: "35 km",
+      B: "30 km",
+      C: "40 km",
+      D: "32 km"
     },
     correct_answer: "A" as const,
     level: 1,
     game_mode: "truth" as const,
     question_order: 4,
-    explanation: "8² + 15² = 64 + 225 = 289 = 17², jadi ini adalah segitiga siku-siku"
+    explanation: "Langkah penyelesaian:\n1. Kapal membentuk segitiga siku-siku\n2. Sisi pertama = 21 km (selatan)\n3. Sisi kedua = 28 km (barat)\n4. Jarak langsung = hipotenusa\n5. Rumus: jarak² = 21² + 28²\n6. jarak² = 441 + 784 = 1225\n7. jarak = √1225 = 35 km"
   },
   {
-    question_text: "Dalam segitiga siku-siku sama kaki dengan sisi 7, berapakah panjang hipotenusa?",
+    question_text: "Sebuah tiang bendera setinggi 24 meter memiliki kawat penyangga yang ditarik dari puncak tiang ke tanah sejauh 10 meter dari kaki tiang. Berapa panjang kawat penyangga tersebut?",
     options: {
-      A: "7√2",
-      B: "14",
-      C: "7√3",
-      D: "10"
+      A: "26 meter",
+      B: "25 meter",
+      C: "28 meter",
+      D: "30 meter"
     },
     correct_answer: "A" as const,
     level: 1,
     game_mode: "truth" as const,
     question_order: 5,
-    explanation: "c² = 7² + 7² = 49 + 49 = 98, maka c = √98 = 7√2"
+    explanation: "Langkah penyelesaian:\n1. Diketahui: tinggi tiang = 24 m, jarak horizontal = 10 m\n2. Kawat penyangga = hipotenusa segitiga siku-siku\n3. Rumus: kawat² = tinggi² + jarak²\n4. kawat² = 24² + 10²\n5. kawat² = 576 + 100 = 676\n6. kawat = √676 = 26 meter"
   },
 
   // Level 1 - Dare Mode Questions

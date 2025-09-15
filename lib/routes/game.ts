@@ -62,12 +62,25 @@ router.get('/questions/:gameMode/:level', async (req: any, res: Response): Promi
     }
     
     // Check if user has access to this level
-    const userProgress = await UserProgress.findOne({
+    let userProgress = await UserProgress.findOne({
       user_id: userId,
       game_mode: gameMode
     });
     
-    if (!userProgress || !userProgress.unlocked_levels.includes(levelNum)) {
+    // Create user progress if it doesn't exist (for new users)
+    if (!userProgress) {
+      userProgress = await UserProgress.create({
+        user_id: userId,
+        game_mode: gameMode,
+        unlocked_levels: [1], // Level 1 unlocked by default
+        current_level: 1,
+        total_score: 0,
+        completed_levels: []
+      });
+    }
+    
+    // Check if user has access to this level
+    if (!userProgress.unlocked_levels.includes(levelNum)) {
       res.status(403).json({
         success: false,
         message: 'Level belum terbuka'

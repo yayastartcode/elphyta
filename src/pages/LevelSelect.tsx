@@ -45,7 +45,7 @@ export default function LevelSelect({ mode = 'truth' }: LevelSelectProps) {
   const fetchUserProgress = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/game/progress', {
+      const response = await fetch('/game/progress', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -53,29 +53,59 @@ export default function LevelSelect({ mode = 'truth' }: LevelSelectProps) {
 
       if (response.ok) {
         const data = await response.json();
-        const userProgress = data.progress || [];
-        
-        // Generate level data based on user progress
-        const levelData: LevelData[] = [];
-        for (let i = 1; i <= 5; i++) {
-          const levelProgress = Array.isArray(userProgress) ? userProgress.find((p: any) => p.level === i && p.mode === mode) : null;
-          levelData.push({
-            level: i,
-            isUnlocked: i === 1 || (levelProgress && levelProgress.isCompleted),
-            stars: levelProgress ? levelProgress.stars : 0,
-            bestScore: levelProgress ? levelProgress.bestScore : 0,
-            isCompleted: levelProgress ? levelProgress.isCompleted : false
-          });
-        }
-        
-        // Unlock next level if previous is completed
-        for (let i = 0; i < levelData.length - 1; i++) {
-          if (levelData[i].isCompleted) {
-            levelData[i + 1].isUnlocked = true;
+        if (data.success) {
+          const userProgress = data.data.progress || [];
+          const levelScores = data.data.levelScores || [];
+          
+          // Find progress for current mode
+          const modeProgress = userProgress.find((p: any) => p.game_mode === mode);
+          
+          // Generate level data based on user progress
+          const levelData: LevelData[] = [];
+          for (let i = 1; i <= 5; i++) {
+            // Check if level is unlocked (level 1 always unlocked, others based on progress)
+            const isUnlocked = i === 1 || (modeProgress && modeProgress.unlocked_levels.includes(i));
+            
+            // Check if level is completed
+            const isCompleted = modeProgress && modeProgress.completed_levels.includes(i);
+            
+            // Get level score from levelScores
+            const levelScore = levelScores.find((ls: any) => 
+              ls.game_mode === mode && ls.level === i
+            );
+            
+            // Calculate stars based on score (example logic)
+            let stars = 0;
+            if (levelScore) {
+              if (levelScore.total_score >= 80) stars = 3;
+              else if (levelScore.total_score >= 60) stars = 2;
+              else if (levelScore.total_score >= 40) stars = 1;
+            }
+            
+            levelData.push({
+              level: i,
+              isUnlocked,
+              stars,
+              bestScore: levelScore ? levelScore.total_score : 0,
+              isCompleted: !!isCompleted
+            });
           }
+          
+          // Unlock next level if previous is completed
+          for (let i = 0; i < levelData.length - 1; i++) {
+            if (levelData[i].isCompleted) {
+              levelData[i + 1].isUnlocked = true;
+            }
+          }
+          
+          setLevels(levelData);
+        } else {
+          console.error('API Error:', data.message);
+          throw new Error(data.message);
         }
-        
-        setLevels(levelData);
+      } else {
+        console.error('HTTP Error:', response.status, response.statusText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
     } catch (error) {
       console.error('Error fetching progress:', error);
@@ -166,7 +196,7 @@ export default function LevelSelect({ mode = 'truth' }: LevelSelectProps) {
               key={levelData.level}
               className={`relative bg-white rounded-lg p-6 border-4 transition-all duration-200 cursor-pointer ${
                 levelData.isUnlocked
-                  ? `border-${config.color}-800 hover:scale-105 hover:shadow-2xl retro-card`
+                  ? `${mode === 'truth' ? 'border-blue-800' : 'border-red-800'} hover:scale-105 hover:shadow-2xl retro-card`
                   : 'border-gray-400 opacity-50 cursor-not-allowed'
               } ${
                 selectedLevel === levelData.level ? 'scale-105 shadow-2xl' : ''
@@ -182,7 +212,7 @@ export default function LevelSelect({ mode = 'truth' }: LevelSelectProps) {
 
               {/* Level Content */}
               <div className="text-center">
-                <div className={`bg-${config.color}-500 text-white rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center border-4 border-${config.color}-700`}>
+                <div className={`${mode === 'truth' ? 'bg-blue-500 border-blue-700' : 'bg-red-500 border-red-700'} text-white rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center border-4`}>
                   <span className="text-2xl font-bold pixel-text">{levelData.level}</span>
                 </div>
                 
@@ -200,7 +230,7 @@ export default function LevelSelect({ mode = 'truth' }: LevelSelectProps) {
                 {renderStars(levelData.stars)}
                 
                 {levelData.isUnlocked && (
-                  <button className={`mt-4 bg-${config.color}-600 hover:bg-${config.color}-700 text-white px-4 py-2 rounded-lg pixel-button transition-colors w-full`}>
+                  <button className={`mt-4 ${mode === 'truth' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-700'} text-white px-4 py-2 rounded-lg pixel-button transition-colors w-full`}>
                     <Play className="w-4 h-4 inline mr-2" />
                     {levelData.isCompleted ? 'MAIN LAGI' : 'MULAI'}
                   </button>

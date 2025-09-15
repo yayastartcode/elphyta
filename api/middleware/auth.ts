@@ -1,14 +1,19 @@
 import jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
 import User from '../models/User.js';
+import mongoose from 'mongoose';
+import connectToDatabase from '../config/vercel-database.js';
 
 interface AuthRequest extends Request {
   user?: any;
 }
 
-export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void | Response> => {
   try {
-    const authHeader = req.headers['authorization'];
+    // Ensure database connection
+    await connectToDatabase();
+    
+    const authHeader = req.headers.authorization;
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
     if (!token) {
@@ -18,10 +23,31 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
       });
     }
 
+    console.log('JWT_SECRET:', process.env.JWT_SECRET);
+    console.log('Token:', token);
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret') as any;
-    const user = await User.findById(decoded.userId).select('-password');
+    console.log('Decoded token:', decoded);
+    console.log('Looking for user with ID:', decoded.userId);
+    console.log('Database connection state:', mongoose.connection.readyState);
+    
+    try {
+      const user = await User.findById(decoded.userId).select('-password_hash');
+      console.log('Found user:', user ? 'YES' : 'NO');
+      if (user) {
+        console.log('User details:', { id: user._id, email: user.email, name: user.name });
+      }
+    } catch (dbError) {
+      console.error('Database error:', dbError);
+      return res.status(500).json({
+        success: false,
+        message: 'Database error'
+      });
+    }
+    
+    const user = await User.findById(decoded.userId).select('-password_hash');
     
     if (!user) {
+      console.log('User not found in database');
       return res.status(401).json({
         success: false,
         message: 'Token tidak valid'
@@ -38,24 +64,28 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   }
 };
 
-export const requireAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction): void | Response => {
   try {
     if (!req.user) {
+      console.log('❌ No user found in request');
       return res.status(401).json({
         success: false,
-        message: 'Autentikasi diperlukan'
+        message: 'Authentication required'
       });
     }
 
     if (req.user.role !== 'admin') {
+      console.log(`❌ User ${req.user.email} is not admin, role: ${req.user.role}`);
       return res.status(403).json({
         success: false,
-        message: 'Akses admin diperlukan'
+        message: 'Admin access required'
       });
     }
 
+    console.log(`✅ Admin access granted for ${req.user.email}`);
     next();
   } catch (error) {
+    console.error('❌ Error in requireAdmin middleware:', error);
     return res.status(500).json({
       success: false,
       message: 'Server error'

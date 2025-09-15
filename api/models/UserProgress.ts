@@ -5,6 +5,8 @@ export interface IUserProgress extends Document {
   game_mode: 'truth' | 'dare';
   current_level: number;
   unlocked_levels: number[];
+  completed_levels: number[];
+  total_score: number;
   level_completion: {
     level_1: { completed: boolean; score: number; completed_at?: Date };
     level_2: { completed: boolean; score: number; completed_at?: Date };
@@ -35,6 +37,14 @@ const UserProgressSchema: Schema = new Schema({
   unlocked_levels: {
     type: [Number],
     default: [1]
+  },
+  completed_levels: {
+    type: [Number],
+    default: []
+  },
+  total_score: {
+    type: Number,
+    default: 0
   },
   level_completion: {
     level_1: {
