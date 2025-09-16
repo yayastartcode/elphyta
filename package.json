@@ -11,6 +11,8 @@
     "preview": "vite preview",
     "check": "tsc --noEmit",
     "server:dev": "nodemon",
+    "server:start": "tsx server.ts",
+    "start": "npm run server:start",
     "dev": "concurrently \"npm run client:dev\" \"npm run server:dev\"",
     "seed:questions": "tsx api/seeds/questions.ts",
     "seed:production": "tsx scripts/seed-production.js",

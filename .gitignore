@@ -23,3 +23,19 @@ dist-ssr
 *.sln
 *.sw?
 .vite
+
+# Development and debug files
+test-*.cjs
+test-*.js
+debug-*.cjs
+debug-*.html
+check-*.cjs
+create-test-admin.cjs
+delete-test-admin.cjs
+generate-admin-token.cjs
+set-admin-auth.html
+manual-unlock-level.cjs
+unlock-all-levels.cjs
+unlock-all-levels-for-user.cjs
+fix-progress-issue.cjs
+ADMIN_AUTH_DEBUG_REPORT.md

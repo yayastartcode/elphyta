@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import Question from '../../api/models/Question';
-import DareInstruction from '../../api/models/DareInstruction';
+import Question from '../../api/models/Question.js';
+import DareInstruction from '../../api/models/DareInstruction.js';
 import UserProgress from '../../api/models/UserProgress.js';
 import GameSession from '../../api/models/GameSession.js';
 import LevelScore from '../../api/models/LevelScore.js';

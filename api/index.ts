@@ -36,6 +36,7 @@ const allowedOrigins = [
   "http://localhost:5174",
   "http://localhost:3000",
   "https://www.elphyta.online",
+  "https://elphyta.online",
   // Vercel preview and production domains will be added automatically
 ];
 
