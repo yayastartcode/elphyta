@@ -1,5 +1,7 @@
-import { Router, type Request, type Response } from 'express';
+import { Router } from 'express';
+import type { Request, Response } from 'express';
 import Question from '../../api/models/Question';
+import DareInstruction from '../../api/models/DareInstruction';
 import UserProgress from '../../api/models/UserProgress.js';
 import GameSession from '../../api/models/GameSession.js';
 import LevelScore from '../../api/models/LevelScore.js';
@@ -18,11 +20,18 @@ router.get('/progress', async (req: any, res: Response): Promise<void> => {
   try {
     const userId = req.user._id;
     
+    // Get user progress for both game modes
     const progress = await UserProgress.find({ user_id: userId });
+    
+    // Get level scores for this user
+    const levelScores = await LevelScore.find({ user_id: userId });
     
     res.json({
       success: true,
-      data: progress
+      data: {
+        progress: progress,
+        levelScores: levelScores
+      }
     });
   } catch (error) {
     console.error('Get progress error:', error);
@@ -88,29 +97,65 @@ router.get('/questions/:gameMode/:level', async (req: any, res: Response): Promi
       return;
     }
     
-    // Get questions for this level
-    const questions = await Question.find({
-      level: levelNum,
-      game_mode: gameMode
-    }).sort({ question_order: 1 }).limit(5);
-    
-    if (questions.length === 0) {
-      res.status(404).json({
-        success: false,
-        message: 'Soal tidak ditemukan untuk level ini'
-      });
-      return;
+    // Get questions for this level with special limits for level 1
+    let questionLimit = 5; // Default limit for levels 2-5
+    if (levelNum === 1) {
+      questionLimit = gameMode === 'truth' ? 3 : 2; // Level 1: 3 truth, 2 dare
     }
     
-    // Remove correct answers from response for security
-    const questionsForClient = questions.map(q => ({
-      _id: q._id,
-      question_text: q.question_text,
-      options: q.options,
-      question_order: q.question_order,
-      level: q.level,
-      game_mode: q.game_mode
-    }));
+    let questionsForClient: any[] = [];
+    
+    if (gameMode === 'truth') {
+      // Fetch from Question model for truth mode
+      const questions = await Question.find({
+        level: levelNum,
+        game_mode: gameMode,
+        is_active: true
+      }).sort({ question_order: 1 }).limit(questionLimit);
+      
+      if (questions.length === 0) {
+        res.status(404).json({
+          success: false,
+          message: 'Soal tidak ditemukan untuk level ini'
+        });
+        return;
+      }
+      
+      // Remove correct answers from response for security
+      questionsForClient = questions.map(q => ({
+        _id: q._id,
+        question_text: q.question_text,
+        options: q.options,
+        question_order: q.question_order,
+        level: q.level,
+        game_mode: q.game_mode,
+        question_type: q.question_type
+      }));
+    } else if (gameMode === 'dare') {
+      // Fetch from DareInstruction model for dare mode
+      const dareInstructions = await DareInstruction.find({
+        level: levelNum,
+        is_active: true
+      }).sort({ created_at: 1 }).limit(questionLimit);
+      
+      if (dareInstructions.length === 0) {
+        res.status(404).json({
+          success: false,
+          message: 'Instruksi dare tidak ditemukan untuk level ini'
+        });
+        return;
+      }
+      
+      // Transform dare instructions to match question format and remove correct answers
+      questionsForClient = dareInstructions.map((dare, index) => ({
+        _id: dare._id,
+        question_text: dare.instruction_text,
+        options: dare.options || { A: '', B: '', C: '', D: '' },
+        question_order: index + 1,
+        level: dare.level,
+        game_mode: 'dare'
+      }));
+    }
     
     res.json({
       success: true,
@@ -147,26 +192,65 @@ router.post('/validate-answer', async (req: any, res: Response): Promise<void> =
       return;
     }
     
-    // Get the question
-    const question = await Question.findById(questionId);
-    
-    if (!question) {
-      res.status(404).json({
+    // Validate questionId format
+    if (!questionId.match(/^[0-9a-fA-F]{24}$/)) {
+      res.status(400).json({
         success: false,
-        message: 'Soal tidak ditemukan'
+        message: 'Invalid question ID format'
       });
       return;
     }
+
+    // Try to find the question in Question model first
+    let question = await Question.findById(questionId);
+    let dareInstruction = null;
+    let isCorrect = false;
+    let correctAnswer = '';
+    let explanation = '';
     
-    // Check if answer is correct
-    const isCorrect = question.correct_answer === userAnswer;
+    if (question) {
+      // Found in Question model (truth mode)
+      if (question.question_type === 'essay') {
+        // For essay questions, do case-insensitive comparison after trimming whitespace
+        const userAnswerNormalized = userAnswer.toString().trim().toLowerCase();
+        const correctAnswerNormalized = question.correct_answer.toString().trim().toLowerCase();
+        isCorrect = userAnswerNormalized === correctAnswerNormalized;
+      } else {
+        // For multiple choice questions, exact match
+        isCorrect = question.correct_answer === userAnswer;
+      }
+      correctAnswer = question.correct_answer;
+      explanation = question.explanation;
+    } else {
+      // Try to find in DareInstruction model (dare mode)
+      dareInstruction = await DareInstruction.findById(questionId);
+      
+      if (!dareInstruction) {
+        res.status(404).json({
+          success: false,
+          message: 'Soal atau instruksi dare tidak ditemukan'
+        });
+        return;
+      }
+      
+      // For dare instructions with multiple choice options
+      if (dareInstruction.options && dareInstruction.correct_answer) {
+        isCorrect = dareInstruction.correct_answer === userAnswer;
+        correctAnswer = dareInstruction.correct_answer;
+      } else {
+        // For simple dare instructions without options, always consider correct
+        isCorrect = true;
+        correctAnswer = userAnswer;
+      }
+      explanation = ''; // Dare instructions don't have explanations
+    }
     
     res.json({
       success: true,
       data: {
         isCorrect,
-        correctAnswer: question.correct_answer,
-        explanation: question.explanation
+        correctAnswer,
+        explanation
       }
     });
   } catch (error) {
@@ -184,8 +268,14 @@ router.post('/validate-answer', async (req: any, res: Response): Promise<void> =
  */
 router.post('/submit', async (req: any, res: Response): Promise<void> => {
   try {
-    const { gameMode, level, answers, totalTime } = req.body;
+    const { gameMode, level, answers, timeSpent } = req.body;
     const userId = req.user._id;
+    
+    console.log('\n=== SUBMIT ENDPOINT DEBUG ===');
+    console.log('req.user:', req.user);
+    console.log('userId from req.user._id:', userId);
+    console.log('gameMode:', gameMode);
+    console.log('level:', level);
     
     // Validation
     if (!gameMode || !level || !answers || !Array.isArray(answers)) {
@@ -196,16 +286,26 @@ router.post('/submit', async (req: any, res: Response): Promise<void> => {
       return;
     }
     
-    // Get questions to check answers
-    const questions = await Question.find({
-      level: parseInt(level),
-      game_mode: gameMode
-    }).sort({ question_order: 1 }).limit(5);
+    // Get questions/dare instructions to check answers
+    let questionsOrDares: any[] = [];
     
-    if (questions.length === 0) {
+    if (gameMode === 'truth') {
+      questionsOrDares = await Question.find({
+        level: parseInt(level),
+        game_mode: gameMode,
+        is_active: true
+      }).sort({ question_order: 1 }).limit(5);
+    } else if (gameMode === 'dare') {
+      questionsOrDares = await DareInstruction.find({
+        level: parseInt(level),
+        is_active: true
+      }).sort({ created_at: 1 }).limit(5);
+    }
+    
+    if (questionsOrDares.length === 0) {
       res.status(404).json({
         success: false,
-        message: 'Soal tidak ditemukan'
+        message: gameMode === 'truth' ? 'Soal tidak ditemukan' : 'Instruksi dare tidak ditemukan'
       });
       return;
     }
@@ -215,22 +315,55 @@ router.post('/submit', async (req: any, res: Response): Promise<void> => {
     let totalScore = 0;
     const questionResults = [];
     
-    for (let i = 0; i < Math.min(answers.length, questions.length); i++) {
-      const question = questions[i];
+    for (let i = 0; i < Math.min(answers.length, questionsOrDares.length); i++) {
+      const item = questionsOrDares[i];
       const userAnswer = answers[i];
-      const isCorrect = question.correct_answer === userAnswer;
+      
+      // Check if answer is correct based on item type
+      let isCorrect = false;
+      let correctAnswer = '';
+      
+      if (userAnswer !== 'TIMEOUT') {
+        if (gameMode === 'truth') {
+          // Truth mode - Question model
+          const question = item;
+          if (question.question_type === 'essay') {
+            // For essay questions, do case-insensitive comparison after trimming whitespace
+            const userAnswerNormalized = userAnswer.toString().trim().toLowerCase();
+            const correctAnswerNormalized = question.correct_answer.toString().trim().toLowerCase();
+            isCorrect = userAnswerNormalized === correctAnswerNormalized;
+          } else {
+            // For multiple choice questions, exact match
+            isCorrect = question.correct_answer === userAnswer;
+          }
+          correctAnswer = question.correct_answer;
+        } else if (gameMode === 'dare') {
+          // Dare mode - DareInstruction model
+          const dareInstruction = item;
+          if (dareInstruction.options && dareInstruction.correct_answer) {
+            // Multiple choice dare
+            isCorrect = dareInstruction.correct_answer === userAnswer;
+            correctAnswer = dareInstruction.correct_answer;
+          } else {
+            // Simple dare - always correct if not timeout
+            isCorrect = true;
+            correctAnswer = userAnswer;
+          }
+        }
+      }
+      // TIMEOUT answers are always incorrect (isCorrect remains false)
       
       if (isCorrect) {
         correctAnswers++;
-        totalScore += question.points || 10; // Default 10 points per question
+        totalScore += (gameMode === 'truth' ? (item.points || 10) : 10); // Default 10 points per question
       }
       
       questionResults.push({
-        question_id: question._id,
+        question_id: item._id,
         user_answer: userAnswer,
-        correct_answer: question.correct_answer,
+        correct_answer: correctAnswer,
         is_correct: isCorrect,
-        points_earned: isCorrect ? (question.points || 10) : 0
+        points_earned: isCorrect ? (gameMode === 'truth' ? (item.points || 10) : 10) : 0
       });
     }
     
@@ -244,7 +377,7 @@ router.post('/submit', async (req: any, res: Response): Promise<void> => {
         question_number: index + 1,
         user_answer: result.user_answer,
         is_correct: result.is_correct,
-        time_spent: Math.round((totalTime || 0) / questionResults.length), // Distribute time evenly
+        time_spent: Math.round((timeSpent || 0) / questionResults.length), // Distribute time evenly
         score: result.points_earned
       });
       return gameSession.save();
@@ -264,7 +397,7 @@ router.post('/submit', async (req: any, res: Response): Promise<void> => {
       if (totalScore > existingLevelScore.total_score) {
         existingLevelScore.total_score = totalScore;
         existingLevelScore.questions_correct = correctAnswers;
-        existingLevelScore.total_time = totalTime || 0;
+        existingLevelScore.total_time = timeSpent || 0;
         existingLevelScore.is_completed = true;
         existingLevelScore.completed_at = new Date();
         existingLevelScore.attempts += 1;
@@ -281,7 +414,7 @@ router.post('/submit', async (req: any, res: Response): Promise<void> => {
         level: parseInt(level),
         total_score: totalScore,
         questions_correct: correctAnswers,
-        total_time: totalTime || 0,
+        total_time: timeSpent || 0,
         is_completed: true,
         attempts: 1
       });
@@ -289,12 +422,45 @@ router.post('/submit', async (req: any, res: Response): Promise<void> => {
     }
     
     // Update user progress - unlock next level if current level is completed with good score
-    const userProgress = await UserProgress.findOne({
+    console.log('Looking for UserProgress with userId:', userId, 'gameMode:', gameMode);
+    
+    let userProgress = await UserProgress.findOne({
       user_id: userId,
       game_mode: gameMode
     });
     
+    console.log('Found userProgress:', userProgress ? 'Yes' : 'No');
     if (userProgress) {
+      console.log('UserProgress ID:', userProgress._id);
+      console.log('UserProgress user_id:', userProgress.user_id);
+      console.log('UserProgress game_mode:', userProgress.game_mode);
+    } else {
+      console.log('No UserProgress found, creating new one...');
+      // Create new UserProgress if it doesn't exist
+      const newUserProgress = new UserProgress({
+        user_id: userId,
+        game_mode: gameMode,
+        current_level: 1,
+        unlocked_levels: [1],
+        completed_levels: [],
+        total_score: 0
+      });
+      await newUserProgress.save();
+      console.log('Created new UserProgress:', newUserProgress._id);
+      
+      // Re-fetch the created record
+      const createdProgress = await UserProgress.findById(newUserProgress._id);
+      console.log('Re-fetched UserProgress:', createdProgress ? 'Yes' : 'No');
+      
+      // Use the created progress for the rest of the logic
+      if (createdProgress) {
+        userProgress = createdProgress;
+      }
+    }
+    
+    if (userProgress) {
+      console.log('Before update - completed_levels:', userProgress.completed_levels);
+      
       // Update level completion
       const levelKey = `level_${level}` as keyof typeof userProgress.level_completion;
       userProgress.level_completion[levelKey] = {
@@ -303,31 +469,54 @@ router.post('/submit', async (req: any, res: Response): Promise<void> => {
         completed_at: new Date()
       };
       
+      // Add to completed_levels array if not already there
+      const currentLevel = parseInt(level);
+      if (!userProgress.completed_levels.includes(currentLevel)) {
+        userProgress.completed_levels.push(currentLevel);
+        console.log('Added level to completed_levels:', currentLevel);
+      }
+      
       // Unlock next level if score is good enough (e.g., 60% correct)
-      const scorePercentage = (correctAnswers / questions.length) * 100;
-      if (scorePercentage >= 60 && parseInt(level) < 5) {
-        const nextLevel = parseInt(level) + 1;
+      const scorePercentage = (correctAnswers / questionsOrDares.length) * 100;
+      console.log('Score percentage:', scorePercentage);
+      
+      if (scorePercentage >= 60 && currentLevel < 5) {
+        const nextLevel = currentLevel + 1;
         if (!userProgress.unlocked_levels.includes(nextLevel)) {
           userProgress.unlocked_levels.push(nextLevel);
+          console.log('Unlocked next level:', nextLevel);
         }
         if (nextLevel > userProgress.current_level) {
           userProgress.current_level = nextLevel;
         }
       }
       
+      console.log('After update - completed_levels:', userProgress.completed_levels);
+      console.log('After update - unlocked_levels:', userProgress.unlocked_levels);
+      
       await userProgress.save();
+      console.log('UserProgress saved successfully');
+    } else {
+      console.log('No userProgress found for userId:', userId, 'gameMode:', gameMode);
     }
     
-    // Emit score update via Socket.io
-    const io = req.app.get('io');
-    io.emit('score-update', {
-      userId,
-      gameMode,
-      level: parseInt(level),
-      score: totalScore,
-      correctAnswers,
-      totalQuestions: questions.length
-    });
+    // Emit score update via Socket.io (if available)
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('score-update', {
+          userId,
+          gameMode,
+          level: parseInt(level),
+          score: totalScore,
+          correctAnswers,
+          totalQuestions: questionsOrDares.length
+        });
+      }
+    } catch (socketError) {
+      // Socket.io not configured, continue without real-time updates
+      console.log('Socket.io not available for real-time updates');
+    }
     
     res.json({
       success: true,
@@ -335,8 +524,8 @@ router.post('/submit', async (req: any, res: Response): Promise<void> => {
       data: {
         score: totalScore,
         correctAnswers,
-        totalQuestions: questions.length,
-        percentage: Math.round((correctAnswers / questions.length) * 100),
+        totalQuestions: questionsOrDares.length,
+        percentage: Math.round((correctAnswers / questionsOrDares.length) * 100),
         results: questionResults,
         nextLevelUnlocked: userProgress?.unlocked_levels.includes(parseInt(level) + 1) || false
       }
@@ -358,24 +547,55 @@ router.get('/leaderboard/:gameMode/:level', async (req: Request, res: Response):
   try {
     const { gameMode, level } = req.params;
     
-    const leaderboard = await LevelScore.find({
+    // Get top scores for this level
+    const topScores = await LevelScore.find({
       game_mode: gameMode,
       level: parseInt(level),
       is_completed: true
     })
-    .populate('user_id', 'username')
+    .populate('user_id', 'email')
     .sort({ total_score: -1, total_time: 1 })
     .limit(10);
     
     res.json({
       success: true,
-      data: leaderboard
+      data: topScores
     });
   } catch (error) {
     console.error('Get leaderboard error:', error);
     res.status(500).json({
       success: false,
       message: 'Terjadi kesalahan server'
+    });
+  }
+});
+
+/**
+ * Reset all user progress and level scores
+ * DELETE /api/game/reset-progress
+ */
+router.delete('/reset-progress', async (req: any, res: Response): Promise<void> => {
+  try {
+    const userId = req.user._id;
+    
+    // Delete all user progress records
+    await UserProgress.deleteMany({ user_id: userId });
+    
+    // Delete all level scores
+    await LevelScore.deleteMany({ user_id: userId });
+    
+    // Delete all game sessions
+    await GameSession.deleteMany({ user_id: userId });
+    
+    res.json({
+      success: true,
+      message: 'Progress berhasil direset. Semua data permainan telah dihapus.'
+    });
+  } catch (error) {
+    console.error('Reset progress error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Terjadi kesalahan saat mereset progress'
     });
   }
 });

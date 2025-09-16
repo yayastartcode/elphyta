@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Play, BookOpen, Trophy, Settings, User, LogOut } from 'lucide-react';
+import { Play, BookOpen, Trophy, Settings, User, LogOut, RotateCcw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { API_BASE_URL } from '../config/api';
 
 export default function Home() {
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
@@ -32,6 +33,37 @@ export default function Home() {
     
     // Navigate to login page
     navigate('/login', { replace: true });
+  };
+
+  const handleResetProgress = async () => {
+    const confirmed = window.confirm(
+      'Apakah Anda yakin ingin mereset semua progress? \n\nSemua data permainan, level yang telah diselesaikan, dan skor akan dihapus secara permanen. Tindakan ini tidak dapat dibatalkan.'
+    );
+    
+    if (!confirmed) return;
+    
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/game/reset-progress`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        alert('Progress berhasil direset! Semua data permainan telah dihapus.');
+        // Optionally refresh the page or update UI
+        window.location.reload();
+      } else {
+        alert('Gagal mereset progress: ' + data.message);
+      }
+    } catch (error) {
+      console.error('Error resetting progress:', error);
+      alert('Terjadi kesalahan saat mereset progress. Silakan coba lagi.');
+    }
   };
 
   // Close dropdown when clicking outside
@@ -154,6 +186,13 @@ export default function Home() {
               </div>
             )}
           </div>
+          <button 
+            onClick={handleResetProgress}
+            className="bg-red-500 hover:bg-red-400 text-red-900 p-4 rounded-lg border-4 border-red-600 transition-colors pixel-button"
+            title="Reset Progress"
+          >
+            <RotateCcw className="w-6 h-6" />
+          </button>
           <button className="bg-gray-500 hover:bg-gray-400 text-gray-900 p-4 rounded-lg border-4 border-gray-600 transition-colors pixel-button">
             <Settings className="w-6 h-6" />
           </button>

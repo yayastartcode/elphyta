@@ -6,7 +6,7 @@ export interface IGameSession extends Document {
   game_mode: 'truth' | 'dare';
   level: number;
   question_number: number;
-  user_answer: 'A' | 'B' | 'C' | 'D';
+  user_answer: 'A' | 'B' | 'C' | 'D' | 'TIMEOUT' | string;
   is_correct: boolean;
   time_spent: number; // in seconds
   score: number;
@@ -43,7 +43,6 @@ const GameSessionSchema: Schema = new Schema({
   },
   user_answer: {
     type: String,
-    enum: ['A', 'B', 'C', 'D'],
     required: true
   },
   is_correct: {

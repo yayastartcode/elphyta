@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 import { Users, Clock, Trophy, TrendingUp, Eye } from 'lucide-react';
+import { API_BASE_URL } from '../config/api';
 
 interface AnalyticsOverview {
   totalSessions: number;
@@ -78,7 +79,7 @@ const UserAnalytics: React.FC = () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/admin/analytics/overview', {
+      const response = await fetch(`${API_BASE_URL}/admin/analytics/overview`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -98,7 +99,7 @@ const UserAnalytics: React.FC = () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/admin/analytics/performance', {
+      const response = await fetch(`${API_BASE_URL}/admin/analytics/performance`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -118,7 +119,7 @@ const UserAnalytics: React.FC = () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/admin/analytics/top-performers', {
+      const response = await fetch(`${API_BASE_URL}/admin/analytics/top-performers`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -138,7 +139,7 @@ const UserAnalytics: React.FC = () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/admin/analytics/user/${userId}`, {
+      const response = await fetch(`${API_BASE_URL}/admin/analytics/user/${userId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();

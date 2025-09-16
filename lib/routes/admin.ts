@@ -1,4 +1,5 @@
-import { Router, type Request, type Response } from 'express';
+import { Router } from 'express';
+import type { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import Question from '../../api/models/Question';
 import DareInstruction from '../../api/models/DareInstruction.js';
@@ -8,11 +9,38 @@ import UserProgress from '../../api/models/UserProgress.js';
 import LevelScore from '../../api/models/LevelScore.js';
 import { authenticateToken, requireAdmin } from '../../api/middleware/auth.js';
 
+interface AuthRequest extends Request {
+  user?: any;
+}
+
 const router = Router();
 
-// Apply authentication and admin check to all admin routes
+// Apply authentication middleware to all admin routes
 router.use(authenticateToken);
 router.use(requireAdmin);
+
+// Test endpoint to verify authentication status
+router.get('/auth-test', (req: AuthRequest, res: Response) => {
+  console.log('🔍 [AUTH TEST] Test endpoint called');
+  console.log('🔍 [AUTH TEST] User object:', req.user ? {
+    id: req.user._id,
+    email: req.user.email,
+    role: req.user.role,
+    name: req.user.name
+  } : 'null');
+  
+  res.json({
+    success: true,
+    message: 'Authentication test successful',
+    user: req.user ? {
+      id: req.user._id,
+      email: req.user.email,
+      role: req.user.role,
+      name: req.user.name
+    } : null,
+    timestamp: new Date().toISOString()
+  });
+});
 
 /**
  * Get all questions with pagination
@@ -25,14 +53,13 @@ router.get('/questions', async (req: Request, res: Response): Promise<void> => {
     const gameMode = req.query.gameMode as string;
     const level = req.query.level as string;
     
-    const filter: any = {};
+    const filter: any = { is_active: { $ne: false } };
     if (gameMode) filter.game_mode = gameMode;
     if (level) filter.level = parseInt(level);
     
     const skip = (page - 1) * limit;
     
     const questions = await Question.find(filter)
-      .populate('admin_id', 'username')
       .sort({ created_at: -1 })
       .skip(skip)
       .limit(limit);
@@ -74,11 +101,12 @@ router.post('/questions', async (req: any, res: Response): Promise<void> => {
       game_mode,
       question_order,
       points,
-      explanation
+      explanation,
+      question_type
     } = req.body;
     
     // Validation
-    if (!question_text || !options || !correct_answer || !level || !game_mode) {
+    if (!question_text || !correct_answer || !level || !game_mode || !explanation || !question_type) {
       res.status(400).json({
         success: false,
         message: 'Data tidak lengkap'
@@ -86,12 +114,43 @@ router.post('/questions', async (req: any, res: Response): Promise<void> => {
       return;
     }
     
-    if (!Array.isArray(options) || options.length < 2) {
+    // For multiple choice questions, options are required
+    if (question_type === 'multiple_choice' && !options) {
       res.status(400).json({
         success: false,
-        message: 'Minimal 2 pilihan jawaban diperlukan'
+        message: 'Options diperlukan untuk soal pilihan ganda'
       });
       return;
+    }
+    
+    // Convert array options to object format for the model (only for multiple choice)
+    let optionsObj;
+    if (question_type === 'multiple_choice') {
+      if (Array.isArray(options)) {
+        if (options.length < 2) {
+          res.status(400).json({
+            success: false,
+            message: 'Minimal 2 pilihan jawaban diperlukan'
+          });
+          return;
+        }
+        optionsObj = {
+          A: options[0] || '',
+          B: options[1] || '',
+          C: options[2] || '',
+          D: options[3] || ''
+        };
+      } else {
+        optionsObj = options;
+      }
+    } else {
+      // For essay questions, set empty options
+      optionsObj = {
+        A: '',
+        B: '',
+        C: '',
+        D: ''
+      };
     }
     
     if (!['truth', 'dare'].includes(game_mode)) {
@@ -129,15 +188,15 @@ router.post('/questions', async (req: any, res: Response): Promise<void> => {
     }
     
     const question = new Question({
-      admin_id: req.user._id,
       question_text,
-      options,
+      options: optionsObj,
       correct_answer,
       level,
       game_mode,
       question_order: question_order || 1,
       points: points || 10,
-      explanation
+      explanation,
+      question_type: question_type || 'multiple_choice'
     });
     
     await question.save();
@@ -281,7 +340,7 @@ router.get('/dare-instructions', async (req: Request, res: Response): Promise<vo
  */
 router.post('/dare-instructions', async (req: any, res: Response): Promise<void> => {
   try {
-    const { instruction_text, level } = req.body;
+    const { instruction_text, level, options, correct_answer } = req.body;
     
     // Validation
     if (!instruction_text || !level) {
@@ -300,11 +359,35 @@ router.post('/dare-instructions', async (req: any, res: Response): Promise<void>
       return;
     }
     
-    const instruction = new DareInstruction({
+    // If options are provided, validate them
+    if (options && (!options.A || !options.B || !options.C || !options.D)) {
+      res.status(400).json({
+        success: false,
+        message: 'Semua pilihan (A, B, C, D) harus diisi jika menggunakan pilihan ganda'
+      });
+      return;
+    }
+    
+    if (options && !correct_answer) {
+      res.status(400).json({
+        success: false,
+        message: 'Jawaban benar diperlukan jika menggunakan pilihan ganda'
+      });
+      return;
+    }
+    
+    const instructionData: any = {
       admin_id: req.user._id,
       instruction_text,
       level
-    });
+    };
+    
+    if (options) {
+      instructionData.options = options;
+      instructionData.correct_answer = correct_answer;
+    }
+    
+    const instruction = new DareInstruction(instructionData);
     
     await instruction.save();
     

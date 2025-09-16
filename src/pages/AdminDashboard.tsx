@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Users, FileText, MessageSquare, BarChart3, Plus, Edit, Trash2, Eye, EyeOff, HelpCircle, TrendingUp, ArrowLeft, Zap } from 'lucide-react';
 import QuestionManagement from '../components/QuestionManagement';
 import UserAnalytics from '../components/UserAnalytics';
+import { API_BASE_URL } from '../config/api';
 
 interface User {
   _id: string;
@@ -41,6 +42,7 @@ const AdminDashboard: React.FC = () => {
   });
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [showDebugInfo, setShowDebugInfo] = useState(false);
 
   useEffect(() => {
     if (activeTab === 'dashboard') {
@@ -54,21 +56,75 @@ const AdminDashboard: React.FC = () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/admin/stats', {
+      const user = localStorage.getItem('user');
+      
+      console.log('🔍 [ADMIN DEBUG] Fetching stats...');
+      console.log('🔍 [ADMIN DEBUG] Token exists:', !!token);
+      console.log('🔍 [ADMIN DEBUG] Token preview:', token ? token.substring(0, 20) + '...' : 'No token');
+      console.log('🔍 [ADMIN DEBUG] User data:', user ? JSON.parse(user) : 'No user');
+      
+      if (!token) {
+        setError('No authentication token found');
+        return;
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/admin/stats`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
+      
+      console.log('🔍 [ADMIN DEBUG] Response status:', response.status);
+      console.log('🔍 [ADMIN DEBUG] Response headers:', Object.fromEntries(response.headers.entries()));
+      
       const data = await response.json();
+      console.log('🔍 [ADMIN DEBUG] Response data:', data);
+      
       if (data.success) {
         setStats(data.data);
       } else {
         setError(data.message);
       }
     } catch (err) {
+      console.error('🔍 [ADMIN DEBUG] Fetch stats error:', err);
       setError('Gagal memuat statistik');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const showDebugData = () => {
+    const token = localStorage.getItem('token');
+    const user = localStorage.getItem('user');
+    const debugInfo = {
+      token: token ? token.substring(0, 20) + '...' : 'No token found',
+      fullToken: token,
+      user: user ? JSON.parse(user) : 'No user found',
+      localStorage: Object.keys(localStorage).reduce((acc, key) => {
+        acc[key] = localStorage.getItem(key);
+        return acc;
+      }, {} as Record<string, string | null>)
+    };
+    console.log('Debug Info:', debugInfo);
+    alert(`Debug Info:\n\nToken: ${debugInfo.token}\nUser: ${JSON.stringify(debugInfo.user, null, 2)}\n\nCheck console for full details`);
+  };
+
+  const testAuthEndpoint = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      console.log('Testing auth with token:', token ? token.substring(0, 20) + '...' : 'No token');
+      
+      const response = await fetch(`${API_BASE_URL}/admin/test-auth`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
+      console.log('Auth test response:', data);
+      alert(`Auth Test Result:\n${JSON.stringify(data, null, 2)}`);
+    } catch (err) {
+      console.error('Auth test error:', err);
+      alert(`Auth Test Error: ${err}`);
     }
   };
 
@@ -76,7 +132,7 @@ const AdminDashboard: React.FC = () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/admin/users?page=${currentPage}&limit=10`, {
+      const response = await fetch(`${API_BASE_URL}/admin/users?page=${currentPage}&limit=10`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -103,7 +159,7 @@ const AdminDashboard: React.FC = () => {
       setSuccess('');
       
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/admin/create-admin', {
+      const response = await fetch(`${API_BASE_URL}/admin/create-admin`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -347,6 +403,20 @@ const AdminDashboard: React.FC = () => {
               </button>
               <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
             </div>
+            <div className="flex items-center space-x-2">
+               <button
+                 onClick={showDebugData}
+                 className="px-3 py-1 text-xs bg-yellow-100 text-yellow-800 rounded border border-yellow-300 hover:bg-yellow-200"
+               >
+                 Debug Info
+               </button>
+               <button
+                 onClick={testAuthEndpoint}
+                 className="px-3 py-1 text-xs bg-blue-100 text-blue-800 rounded border border-blue-300 hover:bg-blue-200"
+               >
+                 Test Auth
+               </button>
+             </div>
           </div>
           
           <nav className="flex space-x-1">

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { Eye, EyeOff, User, Lock, ArrowRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { API_BASE_URL } from '../config/api';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -22,7 +23,8 @@ export default function Login() {
     setError('');
 
     try {
-      const response = await fetch('/auth/login', {
+      console.log('🔍 [LOGIN DEBUG] Starting login process');
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -31,23 +33,122 @@ export default function Login() {
       });
       
       const data = await response.json();
+      console.log('🔍 [LOGIN DEBUG] Login response:', data);
       
       if (data.success) {
+        console.log('🔍 [LOGIN DEBUG] Login successful, calling login function');
+        console.log('🔍 [LOGIN DEBUG] User data:', data.data.user);
+        console.log('🔍 [LOGIN DEBUG] Token:', data.data.token.substring(0, 20) + '...');
+        
+        // Call login function to update AuthContext
         login(data.data.token, data.data.user);
         
-        // Get the intended destination from location state or default to home
-        const from = location.state?.from?.pathname || '/';
+        // Get the intended destination from location state or redirect admin to admin dashboard
+        let from = location.state?.from?.pathname || '/';
         
-        // Add a small delay to ensure state is updated before navigation
-        setTimeout(() => {
+        // If user is admin and no specific destination, redirect to admin dashboard
+        if (data.data.user.role === 'admin' && from === '/') {
+          from = '/admin';
+        }
+        
+        console.log('🔍 [LOGIN DEBUG] User role:', data.data.user.role);
+        console.log('🔍 [LOGIN DEBUG] Intended destination:', from);
+        
+        // Wait for AuthContext to be properly updated by checking localStorage and state
+        const waitForAuthUpdate = () => {
+          return new Promise<void>((resolve) => {
+            const checkAuth = () => {
+              const tokenInStorage = localStorage.getItem('token');
+              const userInStorage = localStorage.getItem('user');
+              
+              console.log('🔍 [LOGIN DEBUG] Checking auth state...');
+              console.log('🔍 [LOGIN DEBUG] Token in localStorage:', tokenInStorage ? 'SET' : 'NULL');
+              console.log('🔍 [LOGIN DEBUG] User in localStorage:', userInStorage ? 'SET' : 'NULL');
+              
+              if (tokenInStorage && userInStorage) {
+                console.log('🔍 [LOGIN DEBUG] Auth state ready, resolving promise');
+                resolve();
+              } else {
+                console.log('🔍 [LOGIN DEBUG] Auth state not ready, checking again in 50ms');
+                setTimeout(checkAuth, 50);
+              }
+            };
+            checkAuth();
+          });
+        };
+        
+        // Wait for auth state to be ready, then navigate
+        waitForAuthUpdate().then(() => {
+          console.log('🔍 [LOGIN DEBUG] Navigating to:', from);
           navigate(from, { replace: true });
-        }, 100);
+        });
       } else {
+        console.log('🔍 [LOGIN DEBUG] Login failed:', data.message);
         setError(data.message || 'Login gagal');
       }
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('🔍 [LOGIN DEBUG] Login error:', error);
       setError('Terjadi kesalahan. Silakan coba lagi.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const quickAdminLogin = async () => {
+    console.log('🔍 [QUICK ADMIN] Starting quick admin login');
+    setIsLoading(true);
+    setError('');
+    
+    // Set admin credentials
+    const adminEmail = 'testadmin@example.com';
+    const adminPassword = 'testadmin123';
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: adminEmail, password: adminPassword }),
+      });
+      
+      const data = await response.json();
+      console.log('🔍 [QUICK ADMIN] Login response:', data);
+      
+      if (data.success) {
+        console.log('🔍 [QUICK ADMIN] Admin login successful');
+        
+        // Call login function to update AuthContext
+        login(data.data.token, data.data.user);
+        
+        // Wait for auth state to be ready, then navigate to admin dashboard
+        const waitForAuthUpdate = () => {
+          return new Promise<void>((resolve) => {
+            const checkAuth = () => {
+              const tokenInStorage = localStorage.getItem('token');
+              const userInStorage = localStorage.getItem('user');
+              
+              if (tokenInStorage && userInStorage) {
+                resolve();
+              } else {
+                setTimeout(checkAuth, 50);
+              }
+            };
+            checkAuth();
+          });
+        };
+        
+        waitForAuthUpdate().then(() => {
+          console.log('🔍 [QUICK ADMIN] Navigating to admin dashboard');
+          navigate('/admin', { replace: true });
+        });
+      } else {
+        console.log('🔍 [QUICK ADMIN] Login failed:', data.message);
+        setError(data.message || 'Quick admin login gagal');
+      }
+    } catch (error) {
+      console.error('🔍 [QUICK ADMIN] Login error:', error);
+      setError('Terjadi kesalahan saat quick admin login.');
     } finally {
       setIsLoading(false);
     }
@@ -143,6 +244,29 @@ export default function Login() {
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-3 px-4 rounded-lg pixel-button transition-colors"
             >
               {isLoading ? 'MEMUAT...' : 'MASUK'}
+            </button>
+            
+            {/* Quick Admin Login Button */}
+            <button
+              type="button"
+              onClick={quickAdminLogin}
+              className="w-full bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg pixel-button transition-colors text-xs"
+            >
+              QUICK ADMIN LOGIN & REDIRECT
+            </button>
+            
+            {/* Debug Button */}
+            <button
+              type="button"
+              onClick={() => {
+                console.log('🔍 [DEBUG] Current state:');
+                console.log('🔍 [DEBUG] localStorage token:', localStorage.getItem('token'));
+                console.log('🔍 [DEBUG] localStorage user:', localStorage.getItem('user'));
+                console.log('🔍 [DEBUG] Current location:', window.location.href);
+              }}
+              className="w-full bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded-lg pixel-button transition-colors text-xs"
+            >
+              DEBUG INFO
             </button>
           </form>
 

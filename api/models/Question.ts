@@ -2,18 +2,20 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IQuestion extends Document {
   question_text: string;
-  options: {
+  question_type: 'multiple_choice' | 'essay';
+  options?: {
     A: string;
     B: string;
     C: string;
     D: string;
   };
-  correct_answer: 'A' | 'B' | 'C' | 'D';
+  correct_answer: 'A' | 'B' | 'C' | 'D' | string;
   level: number;
   game_mode: 'truth' | 'dare';
   question_order: number;
   explanation: string;
   points?: number;
+  is_active?: boolean;
   created_at: Date;
 }
 
@@ -22,15 +24,20 @@ const QuestionSchema: Schema = new Schema({
     type: String,
     required: true
   },
+  question_type: {
+    type: String,
+    enum: ['multiple_choice', 'essay'],
+    default: 'multiple_choice',
+    required: true
+  },
   options: {
-    A: { type: String, required: true },
-    B: { type: String, required: true },
-    C: { type: String, required: true },
-    D: { type: String, required: true }
+    A: { type: String, required: false },
+    B: { type: String, required: false },
+    C: { type: String, required: false },
+    D: { type: String, required: false }
   },
   correct_answer: {
     type: String,
-    enum: ['A', 'B', 'C', 'D'],
     required: true
   },
   level: {
@@ -47,7 +54,6 @@ const QuestionSchema: Schema = new Schema({
   question_order: {
     type: Number,
     min: 1,
-    max: 5,
     required: true
   },
   explanation: {
@@ -58,6 +64,10 @@ const QuestionSchema: Schema = new Schema({
     type: Number,
     default: 10,
     min: 1
+  },
+  is_active: {
+    type: Boolean,
+    default: true
   },
   created_at: {
     type: Date,

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Set Admin Auth</title>
+</head>
+<body>
+    <h1>Setting Admin Authentication...</h1>
+    <script>
+        // Get admin token from API
+        fetch('http://localhost:3001/auth/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                email: 'admin@elphyta.online',
+                password: 'password123'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Set token in localStorage
+                localStorage.setItem('token', data.data.token);
+                localStorage.setItem('user', JSON.stringify(data.data.user));
+                
+                console.log('Admin authentication set successfully!');
+                console.log('Token:', data.data.token);
+                console.log('User:', data.data.user);
+                
+                // Redirect to admin dashboard
+                window.location.href = 'http://localhost:5174/admin';
+            } else {
+                console.error('Login failed:', data.message);
+                document.body.innerHTML = '<h1>Login failed: ' + data.message + '</h1>';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.body.innerHTML = '<h1>Error: ' + error.message + '</h1>';
+        });
+    </script>
+</body>
+</html>

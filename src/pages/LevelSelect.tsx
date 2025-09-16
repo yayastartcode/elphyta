@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Lock, Star, Play, ArrowLeft } from 'lucide-react';
+import { API_BASE_URL } from '../config/api';
 
 interface LevelData {
   level: number;
@@ -45,7 +46,7 @@ export default function LevelSelect({ mode = 'truth' }: LevelSelectProps) {
   const fetchUserProgress = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/game/progress', {
+      const response = await fetch(`${API_BASE_URL}/game/progress`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }

@@ -3,6 +3,13 @@ import mongoose, { Document, Schema } from 'mongoose';
 export interface IDareInstruction extends Document {
   admin_id: mongoose.Types.ObjectId;
   instruction_text: string;
+  options?: {
+    A: string;
+    B: string;
+    C: string;
+    D: string;
+  };
+  correct_answer?: 'A' | 'B' | 'C' | 'D';
   level: number;
   is_active: boolean;
   created_at: Date;
@@ -18,6 +25,16 @@ const DareInstructionSchema: Schema = new Schema({
     type: String,
     required: true,
     trim: true
+  },
+  options: {
+    A: { type: String, trim: true },
+    B: { type: String, trim: true },
+    C: { type: String, trim: true },
+    D: { type: String, trim: true }
+  },
+  correct_answer: {
+    type: String,
+    enum: ['A', 'B', 'C', 'D']
   },
   level: {
     type: Number,

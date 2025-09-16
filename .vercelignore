@@ -5,3 +5,27 @@ dist
 .trae
 .log
 .figma
+
+# Test files
+test-*.cjs
+test-*.js
+test-*.html
+check-*.cjs
+check-*.js
+create-*.cjs
+create-*.js
+debug-*.cjs
+debug-*.js
+debug-*.html
+delete-*.cjs
+delete-*.js
+fix-*.cjs
+fix-*.js
+generate-*.cjs
+generate-*.js
+manual-*.cjs
+manual-*.js
+unlock-*.cjs
+unlock-*.js
+set-*.html
+ADMIN_AUTH_DEBUG_REPORT.md

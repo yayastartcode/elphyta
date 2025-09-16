@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Clock, Heart, Star, ArrowLeft, CheckCircle, XCircle } from 'lucide-react';
+import { API_BASE_URL } from '../config/api';
 
 interface Question {
   _id: string;
   question_text: string;
-  options: {
+  question_type?: 'multiple_choice' | 'essay';
+  options?: {
     A: string;
     B: string;
     C: string;
@@ -25,6 +27,7 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+  const [essayAnswer, setEssayAnswer] = useState<string>('');
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
   const [timeLeft, setTimeLeft] = useState(mode === 'truth' ? 120 : 300);
@@ -35,6 +38,8 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
   const [isValidatingAnswer, setIsValidatingAnswer] = useState(false);
   const [correctAnswer, setCorrectAnswer] = useState<string | null>(null);
   const [explanation, setExplanation] = useState<string>('');
+  const [userAnswers, setUserAnswers] = useState<string[]>([]);
+  const [gameStartTime, setGameStartTime] = useState<number>(Date.now());
 
   const modeConfig = {
     truth: {
@@ -54,6 +59,7 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
   // Fetch questions for the level
   useEffect(() => {
     fetchQuestions();
+    setGameStartTime(Date.now());
   }, [mode, level]);
 
   // Timer effect
@@ -68,10 +74,11 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
     }
   }, [timeLeft, isAnswered, gameStatus]);
 
-  const fallbackQuestions = [
+  const fallbackQuestions: Question[] = [
     {
       _id: '1',
       question_text: 'Berapa hasil dari 2 + 2?',
+      question_type: 'multiple_choice',
       options: { A: '3', B: '4', C: '5', D: '6' },
       correct_answer: 'B',
       explanation: 'Hasil dari 2 + 2 adalah 4'
@@ -79,6 +86,7 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
     {
       _id: '2',
       question_text: 'Apa ibu kota Indonesia?',
+      question_type: 'multiple_choice',
       options: { A: 'Bandung', B: 'Jakarta', C: 'Surabaya', D: 'Medan' },
       correct_answer: 'B',
       explanation: 'Jakarta adalah ibu kota Indonesia'
@@ -107,7 +115,7 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
 
       console.debug('Fetching questions for:', { mode, level, hasToken: !!token });
       
-      const response = await fetch(`/game/questions/${mode}/${level}`, {
+      const response = await fetch(`${API_BASE_URL}/game/questions/${mode}/${level}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -163,6 +171,8 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
   const handleTimeUp = () => {
     setLives(lives - 1);
     setIsAnswered(true);
+    setUserAnswers(prev => [...prev, 'TIMEOUT']); // Track unanswered question with valid enum value
+    
     if (lives <= 1) {
       setGameStatus('failed');
     } else {
@@ -175,7 +185,7 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
   // Get current question and convert options to array
   const currentQuestion = questions && questions.length > 0 && questions[currentQuestionIndex] 
     ? questions[currentQuestionIndex] 
-    : { _id: '', question_text: '', options: {}, correct_answer: 'A', explanation: '' };
+    : { _id: '', question_text: '', question_type: 'multiple_choice' as const, options: {}, correct_answer: 'A', explanation: '' };
   const safeOptions = currentQuestion.options && typeof currentQuestion.options === 'object' 
     ? Object.entries(currentQuestion.options).map(([key, value]) => ({ key, value }))
     : [];
@@ -201,7 +211,7 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
         return;
       }
       
-      const response = await fetch('/game/validate-answer', {
+      const response = await fetch(`${API_BASE_URL}/game/validate-answer`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -209,7 +219,7 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
         },
         body: JSON.stringify({
           questionId: currentQuestion._id,
-          selectedAnswer: answerKey
+          userAnswer: answerKey
         })
       });
       
@@ -221,6 +231,9 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
         }
         
         const isCorrect = data.data.isCorrect;
+        
+        // Track user answer
+        setUserAnswers(prev => [...prev, answerKey]);
         
         setCorrectAnswer(data.data.correctAnswer);
         setExplanation(data.data.explanation);
@@ -276,9 +289,101 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
     }
   };
 
+  const handleEssaySubmit = async () => {
+    if (isAnswered || isValidatingAnswer || !essayAnswer.trim()) return;
+    
+    setIsValidatingAnswer(true);
+    
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.error('No authentication token found');
+        navigate('/login');
+        return;
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/game/validate-answer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          questionId: currentQuestion._id,
+          userAnswer: essayAnswer.trim()
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        
+        if (!data.success) {
+          throw new Error(data.message || 'Failed to validate answer');
+        }
+        
+        const isCorrect = data.data.isCorrect;
+        
+        // Track user answer
+        setUserAnswers(prev => [...prev, essayAnswer.trim()]);
+        
+        setCorrectAnswer(data.data.correctAnswer);
+        setExplanation(data.data.explanation);
+        setIsAnswered(true);
+        
+        if (isCorrect) {
+          const timeBonus = Math.floor(timeLeft / 5) * 10;
+          setScore(score + 100 + timeBonus);
+        } else {
+          setLives(lives - 1);
+          if (lives <= 1) {
+            setGameStatus('failed');
+            setIsValidatingAnswer(false);
+            return;
+          }
+        }
+        
+        setShowExplanation(true);
+        
+        setTimeout(() => {
+          if (currentQuestionIndex >= questions.length - 1) {
+            setGameStatus('completed');
+            submitScore();
+          } else {
+            nextQuestion();
+          }
+        }, 3000);
+      } else {
+        if (response.status === 401) {
+          console.error('Authentication failed');
+          navigate('/login');
+          return;
+        } else if (response.status === 400) {
+          const errorData = await response.json().catch(() => ({ message: 'Invalid request data' }));
+          console.error('Validation error:', errorData.message);
+          throw new Error(`Validation error: ${errorData.message}`);
+        } else if (response.status === 404) {
+          console.error('Question not found');
+          throw new Error('Question not found. Please try again.');
+        }
+        throw new Error(`Server error: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('Error validating essay answer:', error);
+      // Fallback: treat as incorrect
+      setIsAnswered(true);
+      setLives(lives - 1);
+      if (lives <= 1) {
+        setGameStatus('failed');
+      }
+    } finally {
+      setIsValidatingAnswer(false);
+    }
+  };
+
   const nextQuestion = () => {
     setCurrentQuestionIndex(currentQuestionIndex + 1);
     setSelectedAnswer('');
+    setEssayAnswer('');
     setIsAnswered(false);
     setShowExplanation(false);
     setTimeLeft(mode === 'truth' ? 120 : 300);
@@ -296,18 +401,17 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
         return;
       }
       
-      const response = await fetch('/game/submit', {
+      const response = await fetch(`${API_BASE_URL}/game/submit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
+          gameMode: mode,
           level,
-          mode,
-          score,
-          questionsAnswered: currentQuestionIndex + 1,
-          correctAnswers: score > 0 ? Math.floor(score / 100) : 0
+          answers: userAnswers,
+          timeSpent: Math.floor((Date.now() - gameStartTime) / 1000)
         })
       });
       
@@ -520,59 +624,102 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
         {/* Question Card */}
         <div className="bg-white rounded-lg p-8 border-4 border-gray-800 max-w-4xl mx-auto retro-card">
           <div className="mb-8">
-            <h2 className="text-xl font-bold text-gray-800 mb-4 pixel-text leading-relaxed">
+            <h2 className="text-sm font-bold text-gray-800 mb-4 pixel-text leading-relaxed whitespace-pre-line">
               {currentQuestion.question_text || 'Loading question...'}
             </h2>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {safeOptions.length === 0 && (
-                <div className="col-span-full p-4 bg-yellow-100 border border-yellow-400 rounded">
-                  <p className="text-yellow-800 text-sm">
-                    Tidak ada pilihan jawaban tersedia untuk soal ini.
-                  </p>
-                </div>
-              )}
-              {safeOptions.map((option, index) => {
-                const isCorrect = correctAnswer ? option.key === correctAnswer : false;
-                const isSelected = selectedAnswer === option.key;
-                const isUnanswered = !isAnswered;
-                
-                let buttonClass = `w-full p-4 rounded-lg border-4 transition-all duration-200 pixel-button text-left relative`;
-                
-                if (isAnswered) {
-                  if (option.key === correctAnswer) {
-                    buttonClass += ' bg-green-500 border-green-700 text-white';
-                  } else if (option.key === selectedAnswer) {
-                    buttonClass += ' bg-red-500 border-red-700 text-white';
+            {/* Conditional rendering based on question type */}
+            {currentQuestion?.question_type === 'essay' ? (
+              <div className="space-y-4">
+                <textarea
+                  value={essayAnswer}
+                  onChange={(e) => setEssayAnswer(e.target.value)}
+                  placeholder="Tulis jawaban Anda di sini..."
+                  disabled={isAnswered || isValidatingAnswer}
+                  className={`w-full p-4 rounded-lg border-4 transition-all duration-200 pixel-button resize-none h-32 ${
+                    isAnswered
+                      ? 'bg-gray-100 border-gray-400 text-gray-600'
+                      : `bg-${config.color}-50 border-${config.color}-400 text-${config.color}-800 focus:bg-${config.color}-100`
+                  }`}
+                />
+                <button
+                  onClick={handleEssaySubmit}
+                  disabled={isAnswered || isValidatingAnswer || !essayAnswer.trim()}
+                  className={`w-full p-4 rounded-lg border-4 transition-all duration-200 pixel-button font-bold ${
+                    isAnswered || !essayAnswer.trim()
+                      ? 'bg-gray-300 border-gray-500 text-gray-600 cursor-not-allowed'
+                      : `bg-${config.color}-500 border-${config.color}-700 text-white hover:bg-${config.color}-600`
+                  }`}
+                >
+                  {isValidatingAnswer ? (
+                    <div className="flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                      MEMVALIDASI...
+                    </div>
+                  ) : (
+                    'KIRIM JAWABAN'
+                  )}
+                </button>
+                {isAnswered && (
+                  <div className="mt-4 p-4 bg-blue-50 border-2 border-blue-300 rounded-lg">
+                    <h4 className="font-bold text-blue-800 mb-2 pixel-text text-sm">JAWABAN ANDA:</h4>
+                    <p className="text-blue-700 pixel-text text-xs mb-2">{essayAnswer}</p>
+                    <h4 className="font-bold text-blue-800 mb-2 pixel-text text-sm">JAWABAN YANG BENAR:</h4>
+                    <p className="text-blue-700 pixel-text text-xs">{correctAnswer}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {safeOptions.length === 0 && (
+                  <div className="col-span-full p-4 bg-yellow-100 border border-yellow-400 rounded">
+                    <p className="text-yellow-800 text-sm">
+                      Tidak ada pilihan jawaban tersedia untuk soal ini.
+                    </p>
+                  </div>
+                )}
+                {safeOptions.map((option, index) => {
+                  const isCorrect = correctAnswer ? option.key === correctAnswer : false;
+                  const isSelected = selectedAnswer === option.key;
+                  const isUnanswered = !isAnswered;
+                  
+                  let buttonClass = `w-full p-4 rounded-lg border-4 transition-all duration-200 pixel-button text-left relative`;
+                  
+                  if (isAnswered) {
+                    if (option.key === correctAnswer) {
+                      buttonClass += ' bg-green-500 border-green-700 text-white';
+                    } else if (option.key === selectedAnswer) {
+                      buttonClass += ' bg-red-500 border-red-700 text-white';
+                    } else {
+                      buttonClass += ' bg-gray-300 border-gray-500 text-gray-600';
+                    }
                   } else {
-                    buttonClass += ' bg-gray-300 border-gray-500 text-gray-600';
+                    buttonClass += ` bg-${config.color}-100 border-${config.color}-400 text-${config.color}-800 hover:bg-${config.color}-200`;
                   }
-                } else {
-                  buttonClass += ` bg-${config.color}-100 border-${config.color}-400 text-${config.color}-800 hover:bg-${config.color}-200`;
-                }
-                
-                if (isValidatingAnswer && isSelected) {
-                  buttonClass += ' opacity-75';
-                }
-                
-                return (
-                  <button
-                    key={index}
-                    onClick={() => handleAnswerSelect(option.key)}
-                    disabled={isAnswered || isValidatingAnswer}
-                    className={buttonClass}
-                  >
-                    <span className="font-bold mr-2">{option.key}.</span>
-                    {option.value}
-                    {isValidatingAnswer && isSelected && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 rounded-lg">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+                  
+                  if (isValidatingAnswer && isSelected) {
+                    buttonClass += ' opacity-75';
+                  }
+                  
+                  return (
+                    <button
+                      key={index}
+                      onClick={() => handleAnswerSelect(option.key)}
+                      disabled={isAnswered || isValidatingAnswer}
+                      className={buttonClass}
+                    >
+                      <span className="font-bold mr-2">{option.key}.</span>
+                      {option.value}
+                      {isValidatingAnswer && isSelected && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 rounded-lg">
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
           
           {/* Explanation */}
