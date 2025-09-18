@@ -29,6 +29,8 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [essayAnswer, setEssayAnswer] = useState<string>('');
   const [score, setScore] = useState(0);
+  const [finalScore, setFinalScore] = useState(0); // Score from backend
+  const [finalCorrectAnswers, setFinalCorrectAnswers] = useState(0); // Correct answers from backend
   const [lives, setLives] = useState(3);
   const [timeLeft, setTimeLeft] = useState(mode === 'truth' ? 120 : 300);
   const [isAnswered, setIsAnswered] = useState(false);
@@ -60,6 +62,9 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
   useEffect(() => {
     fetchQuestions();
     setGameStartTime(Date.now());
+    setUserAnswers([]);
+    setScore(0);
+    setCurrentQuestionIndex(0);
   }, [mode, level]);
 
   // Timer effect
@@ -232,16 +237,13 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
         
         const isCorrect = data.data.isCorrect;
         
-        // Track user answer
-        setUserAnswers(prev => [...prev, answerKey]);
-        
         setCorrectAnswer(data.data.correctAnswer);
         setExplanation(data.data.explanation);
         setIsAnswered(true);
         
         if (isCorrect) {
           const timeBonus = Math.floor(timeLeft / 5) * 10;
-          setScore(score + 100 + timeBonus);
+          setScore(prevScore => prevScore + 100 + timeBonus);
         } else {
           setLives(lives - 1);
           if (lives <= 1) {
@@ -253,14 +255,24 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
         
         setShowExplanation(true);
         
-        setTimeout(() => {
+        // Track user answer and handle game completion
+        setUserAnswers(prev => {
+          const newAnswers = [...prev, answerKey];
+          
+          // Check if this is the last question
           if (currentQuestionIndex >= questions.length - 1) {
-            setGameStatus('completed');
-            submitScore();
+            setTimeout(() => {
+              setGameStatus('completed');
+              submitScore();
+            }, 3000);
           } else {
-            nextQuestion();
+            setTimeout(() => {
+              nextQuestion();
+            }, 3000);
           }
-        }, 3000);
+          
+          return newAnswers;
+        });
       } else {
         if (response.status === 401) {
           console.error('Authentication failed');
@@ -323,16 +335,13 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
         
         const isCorrect = data.data.isCorrect;
         
-        // Track user answer
-        setUserAnswers(prev => [...prev, essayAnswer.trim()]);
-        
         setCorrectAnswer(data.data.correctAnswer);
         setExplanation(data.data.explanation);
         setIsAnswered(true);
         
         if (isCorrect) {
           const timeBonus = Math.floor(timeLeft / 5) * 10;
-          setScore(score + 100 + timeBonus);
+          setScore(prevScore => prevScore + 100 + timeBonus);
         } else {
           setLives(lives - 1);
           if (lives <= 1) {
@@ -344,14 +353,24 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
         
         setShowExplanation(true);
         
-        setTimeout(() => {
+        // Track user answer and handle game completion
+        setUserAnswers(prev => {
+          const newAnswers = [...prev, essayAnswer.trim()];
+          
+          // Check if this is the last question
           if (currentQuestionIndex >= questions.length - 1) {
-            setGameStatus('completed');
-            submitScore();
+            setTimeout(() => {
+              setGameStatus('completed');
+              submitScore();
+            }, 3000);
           } else {
-            nextQuestion();
+            setTimeout(() => {
+              nextQuestion();
+            }, 3000);
           }
-        }, 3000);
+          
+          return newAnswers;
+        });
       } else {
         if (response.status === 401) {
           console.error('Authentication failed');
@@ -430,6 +449,23 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
         throw new Error(data.message || 'Failed to submit score');
       }
       
+      console.log('=== FRONTEND SCORE RECEIVED ===')
+      console.log('Backend response data:', data)
+      console.log('Score from backend:', data.data?.score)
+      console.log('Correct answers from backend:', data.data?.correctAnswers)
+      console.log('Total questions from backend:', data.data?.totalQuestions)
+      console.log('Percentage from backend:', data.data?.percentage)
+      console.log('Current frontend score state:', score)
+      console.log('=== END FRONTEND SCORE DEBUG ===')
+      
+      // Store backend score data
+      if (data.data?.score !== undefined) {
+        setFinalScore(data.data.score);
+      }
+      if (data.data?.correctAnswers !== undefined) {
+        setFinalCorrectAnswers(data.data.correctAnswers);
+      }
+      
       console.log('Score submitted successfully:', data);
     } catch (error) {
       console.error('Error submitting score:', error);
@@ -440,6 +476,9 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
     setCurrentQuestionIndex(0);
     setSelectedAnswer(null);
     setScore(0);
+    setFinalScore(0);
+    setFinalCorrectAnswers(0);
+    setUserAnswers([]);
     setLives(3);
     setTimeLeft(mode === 'truth' ? 120 : 300);
     setIsAnswered(false);
@@ -478,7 +517,8 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
 
 
   if (gameStatus === 'completed') {
-    const stars = score >= 400 ? 3 : score >= 250 ? 2 : score >= 100 ? 1 : 0;
+    const displayScore = finalScore || score;
+    const stars = displayScore >= 400 ? 3 : displayScore >= 250 ? 2 : displayScore >= 100 ? 1 : 0;
     
     return (
       <div className={`min-h-screen bg-gradient-to-b ${config.bgGradient} flex items-center justify-center`}>
@@ -490,8 +530,13 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
           </div>
           
           <div className="mb-6">
-            <div className="text-4xl font-bold text-gray-800 mb-2 pixel-text">{score}</div>
+            <div className="text-4xl font-bold text-gray-800 mb-2 pixel-text">{displayScore}</div>
             <div className="text-sm text-gray-600 pixel-text">SKOR AKHIR</div>
+            {finalCorrectAnswers > 0 && (
+              <div className="text-sm text-gray-600 pixel-text mt-2">
+                {finalCorrectAnswers} / {questions.length} BENAR
+              </div>
+            )}
             
             <div className="flex justify-center space-x-1 mt-4">
               {[1, 2, 3].map((star) => (
@@ -541,7 +586,7 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
           </div>
           
           <div className="mb-6">
-            <div className="text-4xl font-bold text-gray-800 mb-2 pixel-text">{score}</div>
+            <div className="text-4xl font-bold text-gray-800 mb-2 pixel-text">{finalScore || score}</div>
             <div className="text-sm text-gray-600 pixel-text">SKOR AKHIR</div>
           </div>
           

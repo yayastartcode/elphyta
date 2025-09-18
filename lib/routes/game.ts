@@ -97,10 +97,17 @@ router.get('/questions/:gameMode/:level', async (req: any, res: Response): Promi
       return;
     }
     
-    // Get questions for this level with special limits for level 1
+
+    
+    // Get questions for this level with adaptive limits
     let questionLimit = 5; // Default limit for levels 2-5
     if (levelNum === 1) {
-      questionLimit = gameMode === 'truth' ? 3 : 2; // Level 1: 3 truth, 2 dare
+      questionLimit = gameMode === 'truth' ? 3 : 5; // Level 1: 3 truth, 5 dare (all available)
+    }
+    
+    // For dare mode, use a higher limit to get all available questions for any level
+    if (gameMode === 'dare') {
+      questionLimit = 10; // Set higher limit to get all available dare questions
     }
     
     let questionsForClient: any[] = [];
@@ -315,15 +322,28 @@ router.post('/submit', async (req: any, res: Response): Promise<void> => {
     let totalScore = 0;
     const questionResults = [];
     
-    for (let i = 0; i < Math.min(answers.length, questionsOrDares.length); i++) {
+    console.log('=== SCORING DEBUG ===');
+    console.log('Total questions/dares fetched:', questionsOrDares.length);
+    console.log('Total answers received:', answers.length);
+    console.log('Answers array:', answers);
+    console.log('Array length difference:', questionsOrDares.length - answers.length);
+    
+    // Process all questions, not just the ones with answers
+    for (let i = 0; i < questionsOrDares.length; i++) {
       const item = questionsOrDares[i];
-      const userAnswer = answers[i];
+      const userAnswer = answers[i] || 'NO_ANSWER'; // Handle missing answers
+      
+      console.log(`\n--- Processing Question/Dare ${i + 1} ---`);
+      console.log('Item ID:', item._id);
+      console.log('User Answer:', userAnswer);
+      console.log('Answer exists:', i < answers.length);
+      console.log('Item type:', gameMode === 'truth' ? 'Question' : 'DareInstruction');
       
       // Check if answer is correct based on item type
       let isCorrect = false;
       let correctAnswer = '';
       
-      if (userAnswer !== 'TIMEOUT') {
+      if (userAnswer !== undefined && userAnswer !== null && userAnswer !== 'TIMEOUT' && userAnswer !== 'NO_ANSWER') {
         if (gameMode === 'truth') {
           // Truth mode - Question model
           const question = item;
@@ -345,25 +365,37 @@ router.post('/submit', async (req: any, res: Response): Promise<void> => {
             isCorrect = dareInstruction.correct_answer === userAnswer;
             correctAnswer = dareInstruction.correct_answer;
           } else {
-            // Simple dare - always correct if not timeout
-            isCorrect = true;
+            // Simple dare - always correct if not timeout or no answer
+            if (userAnswer !== 'TIMEOUT' && userAnswer !== 'NO_ANSWER') {
+              isCorrect = true;
+            }
             correctAnswer = userAnswer;
           }
         }
       }
-      // TIMEOUT answers are always incorrect (isCorrect remains false)
+      // TIMEOUT and NO_ANSWER are always incorrect for all question types
+      
+      const pointsForThisQuestion = gameMode === 'truth' ? (item.points || 10) : 10;
       
       if (isCorrect) {
         correctAnswers++;
-        totalScore += (gameMode === 'truth' ? (item.points || 10) : 10); // Default 10 points per question
+        totalScore += pointsForThisQuestion;
       }
+      
+      console.log('Correct Answer Expected:', correctAnswer);
+      console.log('Is Answer Correct:', isCorrect);
+      console.log('Points for this question:', pointsForThisQuestion);
+      console.log('Running total - Correct answers:', correctAnswers, 'Total score:', totalScore);
+      console.log('Points earned:', isCorrect ? pointsForThisQuestion : 0);
+      console.log('Running total - Correct Answers:', correctAnswers);
+      console.log('Running total - Total Score:', totalScore);
       
       questionResults.push({
         question_id: item._id,
         user_answer: userAnswer,
         correct_answer: correctAnswer,
         is_correct: isCorrect,
-        points_earned: isCorrect ? (gameMode === 'truth' ? (item.points || 10) : 10) : 0
+        points_earned: isCorrect ? pointsForThisQuestion : 0
       });
     }
     
@@ -422,7 +454,9 @@ router.post('/submit', async (req: any, res: Response): Promise<void> => {
     }
     
     // Update user progress - unlock next level if current level is completed with good score
+    console.log('=== LEVEL UNLOCKING DEBUG ===');
     console.log('Looking for UserProgress with userId:', userId, 'gameMode:', gameMode);
+    console.log('Current level being completed:', level);
     
     let userProgress = await UserProgress.findOne({
       user_id: userId,
@@ -476,18 +510,47 @@ router.post('/submit', async (req: any, res: Response): Promise<void> => {
         console.log('Added level to completed_levels:', currentLevel);
       }
       
-      // Unlock next level if score is good enough (e.g., 60% correct)
+      // Unlock next level with adaptive scoring based on game mode
       const scorePercentage = (correctAnswers / questionsOrDares.length) * 100;
       console.log('Score percentage:', scorePercentage);
       
-      if (scorePercentage >= 60 && currentLevel < 5) {
-        const nextLevel = currentLevel + 1;
-        if (!userProgress.unlocked_levels.includes(nextLevel)) {
-          userProgress.unlocked_levels.push(nextLevel);
-          console.log('Unlocked next level:', nextLevel);
+      // Different unlocking rules for different game modes
+      console.log('Game mode:', gameMode);
+      console.log('Current level:', currentLevel);
+      console.log('Current unlocked_levels before update:', userProgress.unlocked_levels);
+      
+      if (gameMode === 'dare') {
+        // For dare mode, always unlock next level after completion (regardless of score)
+        console.log('Processing dare mode unlocking...');
+        if (currentLevel < 5) {
+          const nextLevel = currentLevel + 1;
+          console.log('Next level to unlock:', nextLevel);
+          if (!userProgress.unlocked_levels.includes(nextLevel)) {
+            userProgress.unlocked_levels.push(nextLevel);
+            console.log('✅ Unlocked next level for dare mode:', nextLevel);
+          } else {
+            console.log('⚠️ Next level already unlocked:', nextLevel);
+          }
+          if (nextLevel > userProgress.current_level) {
+            userProgress.current_level = nextLevel;
+            console.log('Updated current_level to:', nextLevel);
+          }
+        } else {
+          console.log('Already at max level (5), no more levels to unlock');
         }
-        if (nextLevel > userProgress.current_level) {
-          userProgress.current_level = nextLevel;
+        console.log('Dare mode level', currentLevel, 'completed with score:', scorePercentage + '%');
+      } else {
+        // For truth mode, use score-based unlocking (60% threshold)
+        const unlockThreshold = 60;
+        if (scorePercentage >= unlockThreshold && currentLevel < 5) {
+          const nextLevel = currentLevel + 1;
+          if (!userProgress.unlocked_levels.includes(nextLevel)) {
+            userProgress.unlocked_levels.push(nextLevel);
+            console.log('Unlocked next level:', nextLevel);
+          }
+          if (nextLevel > userProgress.current_level) {
+            userProgress.current_level = nextLevel;
+          }
         }
       }
       
@@ -495,7 +558,17 @@ router.post('/submit', async (req: any, res: Response): Promise<void> => {
       console.log('After update - unlocked_levels:', userProgress.unlocked_levels);
       
       await userProgress.save();
-      console.log('UserProgress saved successfully');
+      console.log('✅ UserProgress saved successfully');
+      
+      // Verify the save by re-fetching
+      const verifyProgress = await UserProgress.findOne({
+        user_id: userId,
+        game_mode: gameMode
+      });
+      console.log('🔍 Verification - unlocked_levels after save:', verifyProgress?.unlocked_levels);
+      console.log('🔍 Verification - current_level after save:', verifyProgress?.current_level);
+      console.log('🔍 Verification - completed_levels after save:', verifyProgress?.completed_levels);
+      console.log('=== END LEVEL UNLOCKING DEBUG ===');
     } else {
       console.log('No userProgress found for userId:', userId, 'gameMode:', gameMode);
     }
@@ -517,6 +590,14 @@ router.post('/submit', async (req: any, res: Response): Promise<void> => {
       // Socket.io not configured, continue without real-time updates
       console.log('Socket.io not available for real-time updates');
     }
+    
+    console.log('\n=== FINAL SCORING SUMMARY ===');
+    console.log('Final Total Score:', totalScore);
+    console.log('Final Correct Answers:', correctAnswers);
+    console.log('Total Questions:', questionsOrDares.length);
+    console.log('Percentage:', Math.round((correctAnswers / questionsOrDares.length) * 100));
+    console.log('Question Results:', questionResults);
+    console.log('=== END SCORING DEBUG ===\n');
     
     res.json({
       success: true,
