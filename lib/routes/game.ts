@@ -100,14 +100,11 @@ router.get('/questions/:gameMode/:level', async (req: any, res: Response): Promi
 
     
     // Get questions for this level with adaptive limits
-    let questionLimit = 5; // Default limit for levels 2-5
-    if (levelNum === 1) {
-      questionLimit = gameMode === 'truth' ? 3 : 5; // Level 1: 3 truth, 5 dare (all available)
-    }
+    let questionLimit = 10; // Default limit to get all available questions
     
     // For dare mode, use a higher limit to get all available questions for any level
     if (gameMode === 'dare') {
-      questionLimit = 10; // Set higher limit to get all available dare questions
+      questionLimit = 15; // Set higher limit to get all available dare questions
     }
     
     let questionsForClient: any[] = [];

@@ -176,14 +176,38 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
   const handleTimeUp = () => {
     setLives(lives - 1);
     setIsAnswered(true);
-    setUserAnswers(prev => [...prev, 'TIMEOUT']); // Track unanswered question with valid enum value
+    
+    // Track user answer and handle game completion
+    setUserAnswers(prev => {
+      const newAnswers = [...prev, 'TIMEOUT'];
+      
+      console.log('=== FRONTEND TIMEOUT COMPLETION CHECK ===');
+      console.log('Current Question Index:', currentQuestionIndex);
+      console.log('Questions Length:', questions.length);
+      console.log('Is Last Question?', currentQuestionIndex >= questions.length - 1);
+      console.log('New Answers Array:', newAnswers);
+      console.log('New Answers Length:', newAnswers.length);
+      console.log('Lives remaining:', lives);
+      
+      // Check if this is the last question
+          if (currentQuestionIndex >= questions.length - 1) {
+            console.log('🎯 TIMEOUT GAME COMPLETED - Submitting score');
+            setTimeout(() => {
+              setGameStatus('completed');
+              submitScore(newAnswers);
+        }, 2000);
+      } else if (lives > 1) {
+        console.log('➡️ TIMEOUT NEXT QUESTION');
+        setTimeout(() => {
+          nextQuestion();
+        }, 2000);
+      }
+      
+      return newAnswers;
+    });
     
     if (lives <= 1) {
       setGameStatus('failed');
-    } else {
-      setTimeout(() => {
-        nextQuestion();
-      }, 2000);
     }
   };
 
@@ -259,13 +283,22 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
         setUserAnswers(prev => {
           const newAnswers = [...prev, answerKey];
           
+          console.log('=== FRONTEND GAME COMPLETION CHECK ===');
+          console.log('Current Question Index:', currentQuestionIndex);
+          console.log('Questions Length:', questions.length);
+          console.log('Is Last Question?', currentQuestionIndex >= questions.length - 1);
+          console.log('New Answers Array:', newAnswers);
+          console.log('New Answers Length:', newAnswers.length);
+          
           // Check if this is the last question
           if (currentQuestionIndex >= questions.length - 1) {
+            console.log('🎯 GAME COMPLETED - Submitting score');
             setTimeout(() => {
               setGameStatus('completed');
-              submitScore();
+              submitScore(newAnswers);
             }, 3000);
           } else {
+            console.log('➡️ NEXT QUESTION');
             setTimeout(() => {
               nextQuestion();
             }, 3000);
@@ -357,13 +390,22 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
         setUserAnswers(prev => {
           const newAnswers = [...prev, essayAnswer.trim()];
           
+          console.log('=== FRONTEND ESSAY COMPLETION CHECK ===');
+          console.log('Current Question Index:', currentQuestionIndex);
+          console.log('Questions Length:', questions.length);
+          console.log('Is Last Question?', currentQuestionIndex >= questions.length - 1);
+          console.log('New Answers Array:', newAnswers);
+          console.log('New Answers Length:', newAnswers.length);
+          
           // Check if this is the last question
           if (currentQuestionIndex >= questions.length - 1) {
+            console.log('🎯 ESSAY GAME COMPLETED - Submitting score');
             setTimeout(() => {
               setGameStatus('completed');
-              submitScore();
+              submitScore(newAnswers);
             }, 3000);
           } else {
+            console.log('➡️ ESSAY NEXT QUESTION');
             setTimeout(() => {
               nextQuestion();
             }, 3000);
@@ -400,7 +442,7 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
   };
 
   const nextQuestion = () => {
-    setCurrentQuestionIndex(currentQuestionIndex + 1);
+    setCurrentQuestionIndex(prev => prev + 1);
     setSelectedAnswer('');
     setEssayAnswer('');
     setIsAnswered(false);
@@ -411,7 +453,7 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
     setIsValidatingAnswer(false);
   };
 
-  const submitScore = async () => {
+  const submitScore = async (finalAnswers?: string[]) => {
     try {
       const token = localStorage.getItem('token');
       if (!token) {
@@ -419,6 +461,17 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
         navigate('/login');
         return;
       }
+      
+      const answersToSubmit = finalAnswers || userAnswers;
+      
+      console.log('=== FRONTEND SUBMIT SCORE DEBUG ===');
+      console.log('Game Mode:', mode);
+      console.log('Level:', level);
+      console.log('User Answers Array:', answersToSubmit);
+      console.log('User Answers Length:', answersToSubmit.length);
+      console.log('Questions Length:', questions.length);
+      console.log('Time Spent:', Math.floor((Date.now() - gameStartTime) / 1000));
+      console.log('=== END FRONTEND SUBMIT DEBUG ===');
       
       const response = await fetch(`${API_BASE_URL}/game/submit`, {
         method: 'POST',
@@ -429,7 +482,7 @@ export default function Game({ mode = 'truth', level = 1 }: GameProps) {
         body: JSON.stringify({
           gameMode: mode,
           level,
-          answers: userAnswers,
+          answers: answersToSubmit,
           timeSpent: Math.floor((Date.now() - gameStartTime) / 1000)
         })
       });
